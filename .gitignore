@@ -2,6 +2,10 @@
 *.local.env
 .DS_Store
 .claude/*.local.json
-knowledge-store/event-catalog.json
-knowledge-store/data-model.json
-outputs/
+node_modules/
+knowledge-store/*
+!knowledge-store/.gitkeep
+!knowledge-store/event-catalog.json
+!knowledge-store/data-model.json
+outputs/*
+!outputs/.gitkeep

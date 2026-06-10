@@ -6,7 +6,7 @@ It bundles three things in one place:
 1. **Complete interface definitions** — `manifest.json` declares every callable
    endpoint with its method, path, required/optional params, response shape,
    limits, and official **doc URL**.
-2. **Calling logic** — `client.py` reads the manifest, signs requests
+2. **Calling logic** — `client.ts` reads the manifest, signs requests
    (Volcengine V4 HMAC-SHA256), and exposes both a generic `call()` and typed
    wrappers.
 3. **A self-update path** — `UPDATE.md` is the procedure for refreshing the
@@ -17,47 +17,46 @@ It bundles three things in one place:
 | File | Role |
 | --- | --- |
 | `manifest.json` | Canonical interface definitions + doc URLs. Source of truth. |
-| `client.py` | `DataFinderClient` (signing, generic `call()`, typed wrappers), `load_config_from_env`. |
-| `cli.py` | `python3 domains/datafinder-interface/cli.py list / describe / call` for discovery and ad-hoc calls. |
+| `client.ts` | `DataFinderClient` (signing, generic `call()`, typed wrappers), `loadConfigFromEnv`. |
+| `cli.ts` | `npm run datafinder -- list / describe / call` for discovery and ad-hoc calls. |
 | `UPDATE.md` | How the agent extends/verifies the manifest from the latest docs. |
-| `__init__.py` | Public exports. |
 
 ## Discover the interface
 
 ```
-python3 domains/datafinder-interface/cli.py list                 # every endpoint + summary
-python3 domains/datafinder-interface/cli.py describe analysis.query
+npm run datafinder -- list                 # every endpoint + summary
+npm run datafinder -- describe analysis.query
 ```
 
-From Python:
+From TypeScript:
 
-```python
-from datafinder import DataFinderClient, load_config_from_env
+```ts
+import { DataFinderClient, loadConfigFromEnv } from "./client.ts";
 
-client = DataFinderClient(load_config_from_env())
-client.list_endpoints()          # [{id, summary, doc_url, path_verified}, ...]
-client.describe("report.query")  # full interface spec
-client.doc_url("report.query")   # official doc link
+const client = new DataFinderClient(loadConfigFromEnv());
+client.listEndpoints();          // [{id, summary, doc_url, path_verified}, ...]
+client.describe("report.query"); // full interface spec
+client.docUrl("report.query");   // official doc link
 ```
 
 ## Call an endpoint
 
 Typed wrapper (preferred for the common ones):
 
-```python
-result = client.query_report(report_id="123", start_date="2026-06-01", end_date="2026-06-07")
+```ts
+const result = await client.queryReport("123");
 ```
 
 Generic, manifest-validated (works for every endpoint, including ones with no wrapper):
 
-```python
-result = client.call("report.query", {
-    "report_id": "123",
-    "period": {"start_time": "2026-06-01", "end_time": "2026-06-07"},
-})
+```ts
+const result = await client.call("report.query", {
+  report_id: "123",
+  period: { start_time: "2026-06-01", end_time: "2026-06-07" }
+});
 ```
 
-`result` is an `APIResult` with `status`, `data`, `error_code`, `warnings`, `endpoint_id`.
+`result` is an `APIResult` with `status`, `data`, `errorCode`, `warnings`, `endpointId`.
 
 ## When an endpoint is missing
 
@@ -72,6 +71,6 @@ Verify them against the docs before trusting empty/error results.
 
 ## Credentials
 
-Never stored here. `load_config_from_env()` reads `.env.local` at the project
+Never stored here. `loadConfigFromEnv()` reads `.env.local` at the project
 root (`DATAFINDER_BASE_URL`, `DATAFINDER_ACCESS_KEY`, `DATAFINDER_SECRET_KEY`,
 `DATAFINDER_APP_ID`, `DATAFINDER_REGION`, `DATAFINDER_SERVICE`).

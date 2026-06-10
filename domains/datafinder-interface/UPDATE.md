@@ -46,7 +46,7 @@ with the existing entries):
   "id": "area.action",
   "summary": "One-line description of what it does.",
   "capability_id": "datafinder.openapi.<name>",
-  "wrapper": "<python_wrapper_name_or_null>",
+  "wrapper": "<typescript_wrapper_name_or_null>",
   "method": "POST",
   "path": "/datafinder/openapi/v1/...",
   "path_verified": true,
@@ -67,16 +67,16 @@ Rules:
 
 ### 4. (Optional) Add a typed wrapper
 
-For frequently used endpoints, add a thin wrapper method to `client.py` that
-calls `self.call("<id>", {...})`, and set the manifest entry's `wrapper` field
+For frequently used endpoints, add a thin wrapper method to `client.ts` that
+calls `this.call("<id>", {...})`, and set the manifest entry's `wrapper` field
 to its name. The generic `call()` already works without a wrapper, so this is
 ergonomics only.
 
 ### 5. Verify
 
 ```
-python3 domains/datafinder-interface/cli.py describe <id>     # confirm the entry reads back
-python3 domains/datafinder-interface/cli.py list              # confirm it appears, no [UNVERIFIED] flag
+npm run datafinder -- describe <id>     # confirm the entry reads back
+npm run datafinder -- list              # confirm it appears, no [UNVERIFIED] flag
 ```
 
 Then, if credentials are configured, do a minimal live call to confirm the path

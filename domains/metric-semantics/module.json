@@ -5,11 +5,11 @@
   "serves": ["knowledge-store/data-model.json"],
   "update": {
     "type": "script",
-    "cmd": "python3 domains/metric-semantics/extract_data_model.py"
+    "cmd": "npx tsx domains/metric-semantics/extract_data_model.ts"
   },
   "check": {
     "type": "script",
-    "cmd": "python3 domains/knowledge-update/check_freshness.py metric-semantics",
+    "cmd": "npx tsx domains/knowledge-update/check_freshness.ts metric-semantics",
     "stale_after_hours": 24
   },
   "doc_links": []

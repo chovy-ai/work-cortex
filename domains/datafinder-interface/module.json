@@ -9,7 +9,7 @@
   },
   "check": {
     "type": "script",
-    "cmd": "python3 domains/knowledge-update/check_freshness.py datafinder-interface",
+    "cmd": "npx tsx domains/knowledge-update/check_freshness.ts datafinder-interface",
     "stale_signal": "manifest 中 path_verified=false 数量 > 0 或 last_verified_against_docs_at 超过 30 天"
   },
   "doc_links": [

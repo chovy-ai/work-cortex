@@ -5,11 +5,11 @@
   "serves": ["knowledge-store/event-catalog.json"],
   "update": {
     "type": "script",
-    "cmd": "bash domains/event-knowledge/sync_nextop.sh && python3 domains/event-knowledge/extract_events.py"
+    "cmd": "bash domains/event-knowledge/sync_nextop.sh && npx tsx domains/event-knowledge/extract_events.ts"
   },
   "check": {
     "type": "script",
-    "cmd": "python3 domains/knowledge-update/check_freshness.py event-knowledge",
+    "cmd": "npx tsx domains/knowledge-update/check_freshness.ts event-knowledge",
     "stale_after_hours": 24
   },
   "doc_links": []

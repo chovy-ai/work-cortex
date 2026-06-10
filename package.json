@@ -1,0 +1,18 @@
+{
+  "name": "data-analysis",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "datafinder": "tsx domains/datafinder-interface/cli.ts",
+    "knowledge": "tsx domains/knowledge-update/update_knowledge.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.15",
+    "tsx": "^4.19.2",
+    "typescript": "^5.5.4",
+    "vitest": "^4.1.8"
+  }
+}

@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "description": "Complete interface manifest for 火山引擎 DataFinder OpenAPI. This is the canonical, machine-readable definition of every DataFinder endpoint the skill can call. The client (client.py) is driven entirely by this file. To add or correct an endpoint, follow UPDATE.md.",
+  "description": "Complete interface manifest for 火山引擎 DataFinder OpenAPI. This is the canonical, machine-readable definition of every DataFinder endpoint the runtime can call. The client (client.ts) is driven entirely by this file. To add or correct an endpoint, follow UPDATE.md.",
   "generated_from_docs_at": "2026-06-10",
   "last_verified_against_docs_at": "2026-06-10",
   "global": {
