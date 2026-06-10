@@ -1,0 +1,143 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nextop.local/schemas/execution-result.schema.json",
+  "title": "Nextop Data Analytics ExecutionResult",
+  "type": "object",
+  "required": ["status", "compiled_id", "execution_kind", "warnings"],
+  "properties": {
+    "status": {
+      "type": "string",
+      "enum": ["success", "error"]
+    },
+    "compiled_id": {
+      "type": "string"
+    },
+    "execution_kind": {
+      "type": "string",
+      "enum": ["openapi", "kafka", "local_sql", "local_file_parse"]
+    },
+    "result": {
+      "type": "object",
+      "required": ["kind"],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": ["table", "records", "file", "scalar", "raw_events", "empty"]
+        },
+        "columns": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "rows": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": {}
+          }
+        },
+        "records": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "file": {
+          "type": "object",
+          "required": ["path_or_ref"],
+          "properties": {
+            "path_or_ref": { "type": "string" },
+            "format": { "type": "string" }
+          },
+          "additionalProperties": false
+        },
+        "value": {},
+        "row_count": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
+    },
+    "error": {
+      "type": "object",
+      "required": ["code", "message", "retryable"],
+      "properties": {
+        "code": {
+          "type": "string",
+          "enum": [
+            "openapi_auth_failed",
+            "openapi_http_error",
+            "openapi_business_error",
+            "kafka_connection_failed",
+            "kafka_consume_failed",
+            "local_file_not_found",
+            "local_parse_failed",
+            "local_query_failed",
+            "schema_mismatch",
+            "unknown_error"
+          ]
+        },
+        "message": {
+          "type": "string"
+        },
+        "retryable": {
+          "type": "boolean"
+        },
+        "details": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      },
+      "additionalProperties": false
+    },
+    "raw": {
+      "type": "object",
+      "required": ["kind"],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "openapi_response",
+            "kafka_records",
+            "local_query_result",
+            "local_file_result"
+          ]
+        },
+        "http_status": {
+          "type": "integer"
+        },
+        "body_ref": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "warnings": {
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": { "status": { "const": "success" } },
+        "required": ["status"]
+      },
+      "then": {
+        "required": ["result"]
+      }
+    },
+    {
+      "if": {
+        "properties": { "status": { "const": "error" } },
+        "required": ["status"]
+      },
+      "then": {
+        "required": ["error"],
+        "not": { "required": ["result"] }
+      }
+    }
+  ],
+  "additionalProperties": false
+}

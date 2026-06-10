@@ -1,0 +1,7 @@
+.env.local
+*.local.env
+.DS_Store
+.claude/*.local.json
+knowledge-store/event-catalog.json
+knowledge-store/data-model.json
+outputs/

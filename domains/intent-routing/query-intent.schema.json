@@ -1,0 +1,323 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nextop.local/schemas/query-intent.schema.json",
+  "title": "Nextop Data Analytics QueryIntent",
+  "type": "object",
+  "required": ["status", "original_text"],
+  "properties": {
+    "status": {
+      "type": "string",
+      "enum": ["matched", "needs_clarification", "unsupported"]
+    },
+    "original_text": {
+      "type": "string",
+      "minLength": 1
+    },
+    "category": {
+      "type": "string",
+      "enum": ["aggregate_analysis", "asset_reuse", "user_level_query", "raw_diagnostics"]
+    },
+    "intent": {
+      "type": "string",
+      "enum": [
+        "analysis_result_fetch",
+        "custom_metric_raw",
+        "dashboard_list",
+        "dashboard_reports",
+        "data_quality_debug",
+        "event_schema_lookup",
+        "event_usage",
+        "ingestion_validation",
+        "large_export",
+        "metadata_query",
+        "metric_breakdown",
+        "metric_trend",
+        "openapi_calling_context",
+        "property_schema_lookup",
+        "raw_event_debug",
+        "raw_export",
+        "raw_user_profile_debug",
+        "realtime_event_sample",
+        "report_query",
+        "segment_export",
+        "segment_query",
+        "tag_compute",
+        "tag_export",
+        "tag_query",
+        "usage_stats",
+        "user_flow",
+        "user_profile",
+        "user_property_export",
+        "user_query_create",
+        "user_query_result"
+      ]
+    },
+    "capability_match": {
+      "type": "object",
+      "required": [
+        "capability_id",
+        "template_id",
+        "matched_required_slots",
+        "missing_required_slots",
+        "fallback_capabilities",
+        "reason"
+      ],
+      "properties": {
+        "capability_id": {
+          "type": "string",
+          "enum": [
+            "datafinder.kafka.behavior_event",
+            "datafinder.kafka.user_profile",
+            "datafinder.local.csv_query",
+            "datafinder.local.ndjson_query",
+            "datafinder.openapi.analysis_download",
+            "datafinder.openapi.analysis_query",
+            "datafinder.openapi.analysis_result",
+            "datafinder.openapi.behavior_flow",
+            "datafinder.openapi.calling_context",
+            "datafinder.openapi.dashboard_list",
+            "datafinder.openapi.dashboard_reports",
+            "datafinder.openapi.ingestion_validation",
+            "datafinder.openapi.metadata_query",
+            "datafinder.openapi.raw_event_export",
+            "datafinder.openapi.report_query",
+            "datafinder.openapi.segment_query",
+            "datafinder.openapi.tag_v1",
+            "datafinder.openapi.tag_v2",
+            "datafinder.openapi.usage_stats",
+            "datafinder.openapi.user_profile",
+            "datafinder.openapi.user_property_export",
+            "datafinder.openapi.user_query_create",
+            "datafinder.openapi.user_query_result"
+          ]
+        },
+        "template_id": {
+          "type": "string",
+          "enum": [
+            "analysis.dau_trend",
+            "analysis.download",
+            "analysis.event_usage",
+            "analysis.metric_breakdown",
+            "analysis.metric_trend",
+            "analysis.result_fetch",
+            "dashboard.list",
+            "dashboard.reports",
+            "governance.ingestion_detail",
+            "kafka.behavior_event_sample",
+            "kafka.user_profile_sample",
+            "local.file_metric_query",
+            "metadata.event_properties",
+            "metadata.events",
+            "metadata.user_properties",
+            "metadata.virtual_events",
+            "metadata.virtual_properties",
+            "openapi.calling_context",
+            "raw_event.custom_export",
+            "raw_event.file_list",
+            "report.query",
+            "segment.detail",
+            "segment.download",
+            "segment.list",
+            "segment.users",
+            "tag.query",
+            "usage.day",
+            "usage.month",
+            "user.behavior_flow",
+            "user.profile",
+            "user.query_create",
+            "user.query_result",
+            "user_property.download"
+          ]
+        },
+        "matched_required_slots": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "missing_required_slots": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "fallback_capabilities": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "slots": {
+      "type": "object",
+      "properties": {
+        "app_id": { "type": ["integer", "string"] },
+        "app_id_or_segment_id": { "type": ["integer", "string"] },
+        "auth_config": { "type": ["object", "string"] },
+        "base_url": { "type": "string" },
+        "breakdowns": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "broker_or_zk": { "type": "string" },
+        "consumer_group": { "type": "string" },
+        "count": { "type": "integer", "minimum": 1 },
+        "current_earliest_timestamp": { "type": ["integer", "string"] },
+        "dashboard_id": { "type": "string" },
+        "dsl_or_result_id": { "type": ["object", "string"] },
+        "environment": { "type": "string" },
+        "error_code": { "type": "string" },
+        "event_name": { "type": "string" },
+        "event_set": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "export_type": { "type": "string" },
+        "fields": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "file_format": { "type": "string" },
+        "file_id": { "type": "string" },
+        "file_path": { "type": "string" },
+        "filters": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["field", "op", "value"],
+            "properties": {
+              "field": { "type": "string" },
+              "op": { "type": "string" },
+              "value": {}
+            },
+            "additionalProperties": false
+          }
+        },
+        "granularity": {
+          "type": "string",
+          "enum": ["hour", "day", "week", "month"]
+        },
+        "identity": {
+          "type": "string",
+          "enum": ["device_id", "user_unique_id", "ssid", "web_id", "session_id"]
+        },
+        "include_device_info": { "type": "boolean" },
+        "include_dsls": { "type": "boolean" },
+        "include_tags": { "type": "boolean" },
+        "keyword": { "type": "string" },
+        "limit": { "type": "integer", "minimum": 1 },
+        "max_rows": { "type": "integer", "minimum": 1 },
+        "metadata_type": {
+          "type": "string",
+          "enum": ["event", "event_property", "user_property", "virtual_event", "virtual_property"]
+        },
+        "metric": {
+          "type": "string",
+          "enum": [
+            "dau",
+            "wau",
+            "mau",
+            "event_count",
+            "event_users",
+            "session_count",
+            "retention",
+            "conversion",
+            "error_rate"
+          ]
+        },
+        "offset_policy": { "type": "string" },
+        "operation": { "type": "string" },
+        "orientation": {
+          "type": "string",
+          "enum": ["before", "after", "around"]
+        },
+        "owner": { "type": "string" },
+        "period": { "type": ["object", "string"] },
+        "project_id_or_header": { "type": ["integer", "string", "object"] },
+        "query_definition": { "type": "object" },
+        "query_id": { "type": "string" },
+        "query_name": { "type": "string" },
+        "query_type": {
+          "type": "string",
+          "enum": ["user_unique_id", "ssid", "web_id", "device_id"]
+        },
+        "report_id": { "type": "string" },
+        "result_id": { "type": "string" },
+        "sample_limit": { "type": "integer", "minimum": 1 },
+        "schema_hint": { "type": "string" },
+        "sdk_language": { "type": "string" },
+        "segment_id": { "type": "string" },
+        "streaming": { "type": "boolean" },
+        "subject_id": { "type": ["integer", "string"] },
+        "tag_id_or_name": { "type": "string" },
+        "tag_name_or_id": { "type": "string" },
+        "tenant_id": { "type": ["integer", "string"] },
+        "time_column": { "type": "string" },
+        "time_range": { "type": ["string", "object"] },
+        "timestamp": { "type": ["integer", "string"] },
+        "timezone": { "type": "string" },
+        "topic": { "type": "string" },
+        "user_id": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "defaults_applied": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["slot", "value", "source"],
+        "properties": {
+          "slot": { "type": "string" },
+          "value": {},
+          "source": { "type": "string" }
+        },
+        "additionalProperties": false
+      }
+    },
+    "clarification_question": {
+      "type": "string"
+    },
+    "reason": {
+      "type": "string"
+    },
+    "possible_fallbacks": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "warnings": {
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": { "status": { "const": "unsupported" } },
+        "required": ["status"]
+      },
+      "then": {
+        "required": ["reason"],
+        "not": { "required": ["capability_match"] }
+      }
+    },
+    {
+      "if": {
+        "properties": { "status": { "enum": ["matched", "needs_clarification"] } },
+        "required": ["status"]
+      },
+      "then": {
+        "required": ["category", "intent", "capability_match", "slots"]
+      }
+    },
+    {
+      "if": {
+        "properties": { "status": { "const": "needs_clarification" } },
+        "required": ["status"]
+      },
+      "then": {
+        "required": ["clarification_question"]
+      }
+    }
+  ],
+  "additionalProperties": false
+}

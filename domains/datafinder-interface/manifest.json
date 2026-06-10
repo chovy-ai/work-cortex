@@ -1,0 +1,426 @@
+{
+  "schema_version": 1,
+  "description": "Complete interface manifest for 火山引擎 DataFinder OpenAPI. This is the canonical, machine-readable definition of every DataFinder endpoint the skill can call. The client (client.py) is driven entirely by this file. To add or correct an endpoint, follow UPDATE.md.",
+  "generated_from_docs_at": "2026-06-10",
+  "last_verified_against_docs_at": "2026-06-10",
+  "global": {
+    "doc_root": "https://www.volcengine.com/docs/84129",
+    "calling_method_doc": "https://www.volcengine.com/docs/84129/1261794?lang=zh",
+    "faq_doc": "https://www.volcengine.com/docs/84129/1563654",
+    "user_analysis_common_params_doc": "https://www.volcengine.com/docs/84129/1285278",
+    "auth": {
+      "scheme": "Volcengine V4 HMAC-SHA256 AK/SK signing",
+      "signed_headers": "content-type;host;x-content-sha256;x-date",
+      "doc": "https://www.volcengine.com/docs/84129/1261794?lang=zh"
+    },
+    "response_envelope": {
+      "shape": "{ \"code\": 0|200, \"message\": \"success\", \"data\": <payload> }",
+      "success_code": [0, 200],
+      "notes": "Volcengine docs commonly show code=200, while some SDK envelopes use code=0. Any other code is a business error. Some private deployments wrap async analysis results behind a result_id returned in data."
+    },
+    "base_urls": {
+      "volcengine_saas_cloud_native": "https://analytics.volcengineapi.com",
+      "volcengine_saas_non_cloud_native": "https://analytics.volcengineapi.com",
+      "byteplus_overseas": "https://analytics.byteplusapi.com",
+      "private_deployment": "<private Finder domain>"
+    },
+    "environment_rule": "Base URL differs by DataFinder environment. Always confirm DATAFINDER_ENVIRONMENT before calling. Wrong environment can return empty or misleading data with code 0."
+  },
+  "param_types": {
+    "_comment": "Param value notation used in required_params / optional_params below.",
+    "int": "integer",
+    "string": "string",
+    "bool": "boolean",
+    "object": "nested JSON object",
+    "array": "JSON array",
+    "date": "YYYY-MM-DD",
+    "ts_ms": "epoch milliseconds (integer)"
+  },
+  "endpoints": [
+    {
+      "id": "dashboard.list",
+      "summary": "List dashboards and reports the account can view, with ids and names.",
+      "capability_id": "datafinder.openapi.dashboard_list",
+      "wrapper": "fetch_dashboard_list",
+      "method": "GET",
+      "path": "/datafinder/openapi/v1/{app_id}/dashboards/all",
+      "path_verified": true,
+      "doc_url": "https://www.volcengine.com/docs/84129/1285228?lang=zh",
+      "required_params": {
+        "app_id": "int"
+      },
+      "optional_params": {},
+      "response": {
+        "output": "dashboard_list",
+        "notes": "Official OpenAPI path is /openapi/v1/{app_id}/dashboards/all."
+      },
+      "limits": {},
+      "use_when": "User references an existing DataFinder dashboard/report by name, or query_path may be dashboard."
+    },
+    {
+      "id": "dashboard.reports",
+      "summary": "List the reports inside one dashboard to resolve report_id from a dashboard name/id.",
+      "capability_id": "datafinder.openapi.dashboard_reports",
+      "wrapper": "list_dashboard_reports",
+      "method": "GET",
+      "path": "/datafinder/openapi/v1/{app_id}/dashboards/{dashboard_id}/reports",
+      "path_verified": true,
+      "doc_url": "https://www.volcengine.com/docs/84129/1285220?lang=zh",
+      "required_params": {
+        "app_id": "int",
+        "dashboard_id": "string"
+      },
+      "optional_params": {},
+      "response": {
+        "output": "report_metadata_list",
+        "notes": "Lists reports inside one dashboard."
+      },
+      "limits": {},
+      "use_when": "A dashboard is known but the specific report_id is not."
+    },
+    {
+      "id": "report.query",
+      "summary": "Query one existing DataFinder report's computed data over a time range. Metric definition is owned by the asset.",
+      "capability_id": "datafinder.openapi.report_query",
+      "wrapper": "query_report",
+      "method": "POST",
+      "path": "/datafinder/openapi/v1/{app_id}/reports/{report_id}",
+      "path_verified": true,
+      "doc_url": "https://www.volcengine.com/docs/84129/1285240?lang=zh",
+      "required_params": {
+        "app_id": "int",
+        "report_id": "string"
+      },
+      "optional_params": {
+        "count": "int",
+        "filter_id": "int",
+        "global_filter": "object"
+      },
+      "query_params": [
+        "count",
+        "filter_id"
+      ],
+      "response": {
+        "output": "report_data",
+        "notes": "POST body may carry global_filter; count/filter_id are query-style params in the official doc."
+      },
+      "limits": {
+        "count_max": 1000
+      },
+      "use_when": "Reusing an existing report/dashboard (Path A)."
+    },
+    {
+      "id": "analysis.query",
+      "summary": "Run an event analysis DSL query and fetch the computed result (trends, distinct users, counts, breakdowns).",
+      "capability_id": "datafinder.openapi.analysis_query",
+      "wrapper": "execute_analysis_query",
+      "method": "POST",
+      "path": "/datafinder/openapi/v1/analysis",
+      "path_verified": true,
+      "doc_url": "https://www.volcengine.com/docs/84129/1285239?lang=zh",
+      "required_params": {
+        "dsl": "object"
+      },
+      "optional_params": {
+        "app_id": "int",
+        "timezone": "string"
+      },
+      "response": {
+        "output": "aggregate_table_or_result_id",
+        "notes": "SaaS returns data inline; private deployment may return result_id."
+      },
+      "limits": {},
+      "use_when": "DAU/metric trends, breakdowns, event user/event counts (Path B aggregate)."
+    },
+    {
+      "id": "analysis.result",
+      "summary": "Fetch a previously submitted analysis result by result_id (async private-deployment flow).",
+      "capability_id": "datafinder.openapi.analysis_result",
+      "wrapper": "fetch_analysis_result",
+      "method": "GET",
+      "path": "/datafinder/openapi/v1/analysis/{result_id}/result",
+      "path_verified": true,
+      "doc_url": "https://www.volcengine.com/docs/84129/1285232?lang=zh",
+      "required_params": {
+        "result_id": "string"
+      },
+      "optional_params": {},
+      "response": {
+        "output": "aggregate_table",
+        "notes": "Private deployment result polling endpoint."
+      },
+      "limits": {},
+      "use_when": "analysis.query returned a result_id instead of inline data."
+    },
+    {
+      "id": "analysis.download",
+      "summary": "Export a large grouped analysis result as CSV/zip beyond normal query row limits.",
+      "capability_id": "datafinder.openapi.analysis_download",
+      "wrapper": "download_analysis",
+      "method": "POST",
+      "path": "/datafinder/openapi/v1/{app_id}/downloads",
+      "path_verified": true,
+      "doc_url": "https://www.volcengine.com/docs/84129/1285237?lang=zh",
+      "required_params": {
+        "app_id": "int"
+      },
+      "optional_params": {
+        "result_id": "string",
+        "dsl": "object"
+      },
+      "response": {
+        "output": "zip_file",
+        "notes": "Official batch download endpoint. Body must include result_id or dsl."
+      },
+      "limits": {
+        "max_rows": 1000000
+      },
+      "use_when": "Result can exceed normal API row limits; batch/offline CSV export."
+    },
+    {
+      "id": "metadata.query",
+      "summary": "Query metadata: event list, event properties, user properties, virtual events/properties.",
+      "capability_id": "datafinder.openapi.metadata_query",
+      "wrapper": "fetch_metadata",
+      "method": "POST",
+      "path": "/datafinder/openapi/v1/metadata/{app_id}/list/events",
+      "path_verified": true,
+      "doc_url": "https://www.volcengine.com/docs/84129/1285285?lang=zh",
+      "required_params": {
+        "app_id": "int"
+      },
+      "optional_params": {
+        "filter": "object",
+        "with": "array"
+      },
+      "response": {
+        "output": "metadata_records",
+        "notes": "Verified against the official 查询事件 metadata endpoint. NOTE: for nextop event discovery prefer the local source-derived event catalog."
+      },
+      "limits": {},
+      "use_when": "Confirming DataFinder-registered event/property schema; fallback event discovery."
+    },
+    {
+      "id": "user.profile",
+      "summary": "Fetch one user/device profile, device info, latest user properties, and tags.",
+      "capability_id": "datafinder.openapi.user_profile",
+      "wrapper": "query_user_profile",
+      "method": "POST",
+      "path": "/datafinder/openapi/v1/{app_id}/behaviors/profiles",
+      "path_verified": true,
+      "doc_url": "https://www.volcengine.com/docs/84129/1285261?lang=zh",
+      "required_params": {
+        "app_id": "int",
+        "query_type": "string",
+        "query_id": "string"
+      },
+      "optional_params": {
+        "include_tags": "bool",
+        "include_device_info": "bool"
+      },
+      "response": {
+        "output": "user_profile",
+        "notes": "query_type one of: user_unique_id, device_id, ssid, web_id. See common params doc 1285278."
+      },
+      "limits": {},
+      "use_when": "Debugging a single user/device identity or enriching a behavioral case study."
+    },
+    {
+      "id": "user.behavior_flow",
+      "summary": "Reconstruct one user's event sequence around an anchor timestamp.",
+      "capability_id": "datafinder.openapi.behavior_flow",
+      "wrapper": "query_behavior_flow",
+      "method": "POST",
+      "path": "/datafinder/openapi/v1/{app_id}/behaviors/flows",
+      "path_verified": true,
+      "doc_url": "https://www.volcengine.com/docs/84129/1285271?lang=zh",
+      "required_params": {
+        "app_id": "int",
+        "query_type": "string",
+        "query_id": "string",
+        "timestamp": "ts_ms",
+        "orientation": "string",
+        "count": "int"
+      },
+      "optional_params": {
+        "current_earliest_timestamp": "ts_ms"
+      },
+      "response": {
+        "output": "behavior_sequence",
+        "notes": "orientation one of: before, after, around."
+      },
+      "limits": {},
+      "use_when": "User-level timeline analysis; explaining why one user appears/does not in aggregates."
+    },
+    {
+      "id": "user.query_create",
+      "summary": "Create a user-list query from a user analysis definition; returns a query id.",
+      "capability_id": "datafinder.openapi.user_query_create",
+      "wrapper": "create_user_query",
+      "method": "POST",
+      "path": "/datafinder/openapi/v1/{app_id}/user_analysis/queries",
+      "path_verified": true,
+      "doc_url": "https://www.volcengine.com/docs/84129/1285287?lang=zh",
+      "required_params": {
+        "app_id": "int",
+        "query_type": "string"
+      },
+      "optional_params": {
+        "profile_names": "array",
+        "id_types": "array",
+        "analysis": "object",
+        "cohort": "object",
+        "limit": "int"
+      },
+      "response": {
+        "output": "user_query_id",
+        "notes": "Pair with user.query_result."
+      },
+      "limits": {},
+      "use_when": "Output is a user list rather than aggregate metrics."
+    },
+    {
+      "id": "user.query_result",
+      "summary": "Fetch the user-list result for a previously created user query id.",
+      "capability_id": "datafinder.openapi.user_query_result",
+      "wrapper": "fetch_user_query_result",
+      "method": "GET",
+      "path": "/datafinder/openapi/v1/{app_id}/user_analysis/queries/{query_id}",
+      "path_verified": true,
+      "doc_url": "https://www.volcengine.com/docs/84129/1285291?lang=zh",
+      "required_params": {
+        "app_id": "int",
+        "query_id": "string"
+      },
+      "optional_params": {},
+      "response": {
+        "output": "user_list",
+        "notes": "Official non-streaming result endpoint. Streaming export is a separate API."
+      },
+      "limits": {},
+      "use_when": "Retrieving the users matched by a created user query."
+    },
+    {
+      "id": "segment.query",
+      "summary": "Fetch sample users for a DataFinder cohort/segment.",
+      "capability_id": "datafinder.openapi.segment_query",
+      "wrapper": "query_segment",
+      "method": "GET",
+      "path": "/datafinder/openapi/v1/{app_id}/cohorts/{cohort_id}/sample",
+      "path_verified": true,
+      "doc_url": "https://www.volcengine.com/docs/6285/1738909?lang=zh",
+      "required_params": {
+        "app_id": "int",
+        "cohort_id": "int",
+        "count": "int"
+      },
+      "optional_params": {},
+      "response": {
+        "output": "segment_sample_users",
+        "notes": "Official cohort sample-user endpoint. Segment list/detail/download are separate APIs and must be registered independently before use."
+      },
+      "limits": {},
+      "use_when": "User asks for example users in a known DataFinder segment/cohort."
+    },
+    {
+      "id": "tag.v1",
+      "summary": "Query/compute/export user tags (Tag V1.0).",
+      "capability_id": "datafinder.openapi.tag_v1",
+      "wrapper": "query_tag_v1",
+      "method": "POST",
+      "path": "/datatag/openapi/v1/app/{app_id}/tag/{tag_name}/download",
+      "path_verified": true,
+      "doc_url": "https://www.volcengine.com/docs/84129/1285265?lang=zh",
+      "tag_metadata_doc": "https://www.volcengine.com/docs/84129/1285270",
+      "required_params": {
+        "app_id": "int",
+        "tag_name": "string",
+        "type": "string",
+        "condition": "object"
+      },
+      "optional_params": {
+        "period": "object"
+      },
+      "response": {
+        "output": "tag_metadata_or_result",
+        "notes": "Verified V1 tag export endpoint. Use only when the environment requires V1 tags."
+      },
+      "limits": {},
+      "use_when": "Question depends on V1 user tags / CDP label metadata."
+    },
+    {
+      "id": "tag.v2",
+      "summary": "Query/compute user tags (Tag V2.0). Requires tenant/project header.",
+      "capability_id": "datafinder.openapi.tag_v2",
+      "wrapper": "query_tag_v2",
+      "method": "GET",
+      "path": "/finder/openApi/v2/cdpMeta/labelSystem/label/historyData",
+      "path_verified": true,
+      "doc_url": "https://www.volcengine.com/docs/84129/1285263?lang=zh",
+      "required_params": {
+        "tenant_id": "string",
+        "id": "int",
+        "showNum": "int",
+        "startDate": "date",
+        "endDate": "date"
+      },
+      "header_params": {
+        "tenant_id": "X-Tenant"
+      },
+      "optional_params": {},
+      "response": {
+        "output": "tag_metadata_or_result",
+        "notes": "Verified V2 tag history result endpoint. tenant_id maps to the X-Tenant header in official docs."
+      },
+      "limits": {},
+      "use_when": "Question depends on V2 user tags."
+    },
+    {
+      "id": "raw_event.export",
+      "summary": "List or create raw event/attribute data exports (offline raw event files).",
+      "capability_id": "datafinder.openapi.raw_event_export",
+      "wrapper": "export_raw_events",
+      "method": "GET",
+      "path": "/datarangers/openapi/v1/{app_id}/exports",
+      "path_verified": true,
+      "doc_url": "https://www.volcengine.com/docs/84129/1285221?lang=zh",
+      "required_params": {
+        "app_id": "int"
+      },
+      "optional_params": {
+        "begin_date": "date",
+        "end_date": "date"
+      },
+      "response": {
+        "output": "raw_event_files",
+        "notes": "Verified custom export file-list endpoint. For realtime, use Kafka instead."
+      },
+      "limits": {},
+      "use_when": "Offline raw event reconstruction not expressible in analysis DSL."
+    },
+    {
+      "id": "usage.stats",
+      "summary": "Query DataFinder product usage/cost statistics by day or month.",
+      "capability_id": "datafinder.openapi.usage_stats",
+      "wrapper": "query_usage_stats",
+      "method": "POST",
+      "path": "/datafinder/openapi/v1/usage_amount",
+      "path_verified": true,
+      "doc_url": "https://www.volcengine.com/docs/84129/1285274?lang=zh",
+      "required_params": {
+        "app_ids": "array",
+        "start_time": "ts_ms",
+        "end_time": "ts_ms"
+      },
+      "optional_params": {
+        "org_id": "string"
+      },
+      "response": {
+        "output": "usage_statistics",
+        "notes": "Verified monthly usage endpoint. Daily usage is /openapi/v1/usage_amount/daily."
+      },
+      "limits": {},
+      "use_when": "User asks about DataFinder usage/cost, not behavioral metrics."
+    }
+  ]
+}

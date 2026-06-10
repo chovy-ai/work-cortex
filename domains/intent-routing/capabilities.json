@@ -1,0 +1,686 @@
+{
+  "version": 1,
+  "categories": [
+    {
+      "category": "aggregate_analysis",
+      "datafinder_area": "查询分析",
+      "purpose": "Compute aggregate metrics, trends, breakdowns, and analysis results."
+    },
+    {
+      "category": "asset_reuse",
+      "datafinder_area": "看板与报表",
+      "purpose": "Reuse existing DataFinder dashboards and report definitions."
+    },
+    {
+      "category": "user_level_query",
+      "datafinder_area": "用户分析、分群、用户标签",
+      "purpose": "Query one user/device, user lists, segments, and tags."
+    },
+    {
+      "category": "raw_diagnostics",
+      "datafinder_area": "原始事件导出、用户属性导出、数据治理/Kafka、元数据",
+      "purpose": "Inspect raw data, metadata, ingestion quality, and custom extracts."
+    }
+  ],
+  "capabilities": [
+    {
+      "category": "aggregate_analysis",
+      "capability_id": "datafinder.openapi.analysis_query",
+      "status": "available_after_config",
+      "datafinder_area": "查询分析",
+      "supported_intents": [
+        "metric_trend",
+        "metric_breakdown",
+        "event_usage"
+      ],
+      "templates": [
+        "analysis.dau_trend",
+        "analysis.metric_trend",
+        "analysis.metric_breakdown",
+        "analysis.event_usage"
+      ],
+      "required_slots": [
+        "app_id",
+        "metric",
+        "time_range",
+        "granularity"
+      ],
+      "optional_slots": [
+        "identity",
+        "filters",
+        "breakdowns",
+        "timezone",
+        "event_set"
+      ],
+      "constraints": {
+        "requires_openapi_config": true,
+        "supports_raw_events": false,
+        "supports_large_export": false,
+        "supports_existing_dashboard_assets": false
+      },
+      "output": "aggregate_table",
+      "fallback_capabilities": [
+        "datafinder.openapi.analysis_download",
+        "datafinder.kafka.behavior_event"
+      ],
+      "unsupported_when": [
+        "request requires raw event payload fields",
+        "request requires existing dashboard/report parity",
+        "result exceeds normal query row limits"
+      ]
+    },
+    {
+      "category": "aggregate_analysis",
+      "capability_id": "datafinder.openapi.analysis_result",
+      "status": "available_after_config",
+      "datafinder_area": "查询分析",
+      "supported_intents": [
+        "analysis_result_fetch"
+      ],
+      "templates": [
+        "analysis.result_fetch"
+      ],
+      "required_slots": [
+        "result_id"
+      ],
+      "optional_slots": [
+        "app_id"
+      ],
+      "constraints": {
+        "requires_openapi_config": true,
+        "requires_existing_result_id": true
+      },
+      "output": "aggregate_table",
+      "fallback_capabilities": [],
+      "unsupported_when": [
+        "request has no result_id"
+      ]
+    },
+    {
+      "category": "aggregate_analysis",
+      "capability_id": "datafinder.openapi.analysis_download",
+      "status": "available_after_config",
+      "datafinder_area": "查询分析",
+      "supported_intents": [
+        "large_export",
+        "metric_breakdown"
+      ],
+      "templates": [
+        "analysis.download"
+      ],
+      "required_slots": [
+        "app_id",
+        "dsl_or_result_id"
+      ],
+      "optional_slots": [
+        "file_format",
+        "max_rows",
+        "time_range",
+        "filters",
+        "breakdowns"
+      ],
+      "constraints": {
+        "requires_openapi_config": true,
+        "supports_large_export": true
+      },
+      "output": "file",
+      "fallback_capabilities": [
+        "datafinder.openapi.analysis_query"
+      ],
+      "unsupported_when": [
+        "request needs raw event payloads rather than computed analysis output"
+      ]
+    },
+    {
+      "category": "aggregate_analysis",
+      "capability_id": "datafinder.local.csv_query",
+      "status": "local_only",
+      "datafinder_area": "local_file",
+      "supported_intents": [
+        "metric_trend",
+        "metric_breakdown",
+        "event_usage"
+      ],
+      "templates": [
+        "local.file_metric_query"
+      ],
+      "required_slots": [
+        "file_path",
+        "metric"
+      ],
+      "optional_slots": [
+        "time_column",
+        "identity_column",
+        "filters",
+        "breakdowns",
+        "time_range"
+      ],
+      "constraints": {
+        "requires_openapi_config": false,
+        "requires_local_file": true
+      },
+      "output": "computed_table",
+      "fallback_capabilities": [],
+      "unsupported_when": [
+        "no local CSV file is provided"
+      ]
+    },
+    {
+      "category": "aggregate_analysis",
+      "capability_id": "datafinder.local.ndjson_query",
+      "status": "local_only",
+      "datafinder_area": "local_file",
+      "supported_intents": [
+        "metric_trend",
+        "metric_breakdown",
+        "event_usage",
+        "raw_event_debug"
+      ],
+      "templates": [
+        "local.file_metric_query"
+      ],
+      "required_slots": [
+        "file_path",
+        "schema_hint",
+        "metric"
+      ],
+      "optional_slots": [
+        "time_range",
+        "filters",
+        "breakdowns",
+        "identity"
+      ],
+      "constraints": {
+        "requires_openapi_config": false,
+        "requires_local_file": true
+      },
+      "output": "computed_table",
+      "fallback_capabilities": [],
+      "unsupported_when": [
+        "no local NDJSON file is provided"
+      ]
+    },
+    {
+      "category": "asset_reuse",
+      "capability_id": "datafinder.openapi.dashboard_list",
+      "status": "available_after_config",
+      "datafinder_area": "看板与报表",
+      "supported_intents": [
+        "dashboard_list"
+      ],
+      "templates": [
+        "dashboard.list"
+      ],
+      "required_slots": [
+        "app_id"
+      ],
+      "optional_slots": [
+        "owner",
+        "keyword"
+      ],
+      "constraints": {
+        "requires_openapi_config": true,
+        "supports_existing_dashboard_assets": true
+      },
+      "output": "dashboard_list",
+      "fallback_capabilities": [],
+      "unsupported_when": []
+    },
+    {
+      "category": "asset_reuse",
+      "capability_id": "datafinder.openapi.dashboard_reports",
+      "status": "available_after_config",
+      "datafinder_area": "看板与报表",
+      "supported_intents": [
+        "dashboard_reports"
+      ],
+      "templates": [
+        "dashboard.reports"
+      ],
+      "required_slots": [
+        "app_id",
+        "dashboard_id"
+      ],
+      "optional_slots": [
+        "include_dsls"
+      ],
+      "constraints": {
+        "requires_openapi_config": true,
+        "requires_dashboard_id": true
+      },
+      "output": "report_metadata_list",
+      "fallback_capabilities": [
+        "datafinder.openapi.dashboard_list"
+      ],
+      "unsupported_when": [
+        "no dashboard_id or discoverable dashboard name is available"
+      ]
+    },
+    {
+      "category": "asset_reuse",
+      "capability_id": "datafinder.openapi.report_query",
+      "status": "available_after_config",
+      "datafinder_area": "看板与报表",
+      "supported_intents": [
+        "report_query"
+      ],
+      "templates": [
+        "report.query"
+      ],
+      "required_slots": [
+        "app_id",
+        "report_id"
+      ],
+      "optional_slots": [
+        "count",
+        "filters",
+        "period"
+      ],
+      "constraints": {
+        "requires_openapi_config": true,
+        "requires_report_id": true,
+        "supports_existing_dashboard_assets": true
+      },
+      "output": "report_data",
+      "fallback_capabilities": [
+        "datafinder.openapi.dashboard_reports"
+      ],
+      "unsupported_when": [
+        "request does not reference an existing report/dashboard asset"
+      ]
+    },
+    {
+      "category": "user_level_query",
+      "capability_id": "datafinder.openapi.user_profile",
+      "status": "available_after_config",
+      "datafinder_area": "用户分析",
+      "supported_intents": [
+        "user_profile"
+      ],
+      "templates": [
+        "user.profile"
+      ],
+      "required_slots": [
+        "app_id",
+        "query_type",
+        "query_id"
+      ],
+      "optional_slots": [
+        "include_tags",
+        "include_device_info"
+      ],
+      "constraints": {
+        "requires_openapi_config": true,
+        "requires_user_identifier": true
+      },
+      "output": "user_profile",
+      "fallback_capabilities": [
+        "datafinder.openapi.behavior_flow"
+      ],
+      "unsupported_when": [
+        "request needs aggregate metric output"
+      ]
+    },
+    {
+      "category": "user_level_query",
+      "capability_id": "datafinder.openapi.behavior_flow",
+      "status": "available_after_config",
+      "datafinder_area": "用户分析",
+      "supported_intents": [
+        "user_flow"
+      ],
+      "templates": [
+        "user.behavior_flow"
+      ],
+      "required_slots": [
+        "app_id",
+        "query_type",
+        "query_id",
+        "timestamp",
+        "orientation",
+        "count"
+      ],
+      "optional_slots": [
+        "current_earliest_timestamp"
+      ],
+      "constraints": {
+        "requires_openapi_config": true,
+        "requires_user_identifier": true,
+        "requires_anchor_timestamp": true
+      },
+      "output": "behavior_sequence",
+      "fallback_capabilities": [
+        "datafinder.kafka.behavior_event"
+      ],
+      "unsupported_when": [
+        "request needs full raw export rather than one user behavior sequence"
+      ]
+    },
+    {
+      "category": "user_level_query",
+      "capability_id": "datafinder.openapi.user_query_create",
+      "status": "available_after_config",
+      "datafinder_area": "用户分析",
+      "supported_intents": [
+        "user_query_create"
+      ],
+      "templates": [
+        "user.query_create"
+      ],
+      "required_slots": [
+        "app_id",
+        "query_definition"
+      ],
+      "optional_slots": [
+        "query_name"
+      ],
+      "constraints": {
+        "requires_openapi_config": true
+      },
+      "output": "user_query_id",
+      "fallback_capabilities": [],
+      "unsupported_when": [
+        "request only needs aggregate counts"
+      ]
+    },
+    {
+      "category": "user_level_query",
+      "capability_id": "datafinder.openapi.user_query_result",
+      "status": "available_after_config",
+      "datafinder_area": "用户分析",
+      "supported_intents": [
+        "user_query_result",
+        "large_export"
+      ],
+      "templates": [
+        "user.query_result"
+      ],
+      "required_slots": [
+        "app_id",
+        "query_id"
+      ],
+      "optional_slots": [
+        "streaming",
+        "limit"
+      ],
+      "constraints": {
+        "requires_openapi_config": true,
+        "requires_existing_query_id": true
+      },
+      "output": "user_list",
+      "fallback_capabilities": [
+        "datafinder.openapi.user_query_create"
+      ],
+      "unsupported_when": [
+        "request has no user query id or definition"
+      ]
+    },
+    {
+      "category": "user_level_query",
+      "capability_id": "datafinder.openapi.segment_query",
+      "status": "available_after_config",
+      "datafinder_area": "分群",
+      "supported_intents": [
+        "segment_query",
+        "segment_export"
+      ],
+      "templates": [
+        "segment.list",
+        "segment.detail",
+        "segment.users",
+        "segment.download"
+      ],
+      "required_slots": [
+        "app_id_or_segment_id"
+      ],
+      "optional_slots": [
+        "streaming",
+        "limit",
+        "filters"
+      ],
+      "constraints": {
+        "requires_openapi_config": true
+      },
+      "output": "segment_metadata_or_users",
+      "fallback_capabilities": [
+        "datafinder.openapi.user_query_result"
+      ],
+      "unsupported_when": [
+        "request is not about segments or user lists"
+      ]
+    },
+    {
+      "category": "user_level_query",
+      "capability_id": "datafinder.openapi.tag_v1",
+      "status": "available_after_config",
+      "datafinder_area": "用户标签V1.0",
+      "supported_intents": [
+        "tag_query",
+        "tag_export",
+        "tag_compute"
+      ],
+      "templates": [
+        "tag.query"
+      ],
+      "required_slots": [
+        "app_id",
+        "tag_name_or_id"
+      ],
+      "optional_slots": [
+        "operation",
+        "file_id"
+      ],
+      "constraints": {
+        "requires_openapi_config": true,
+        "tag_version": "v1"
+      },
+      "output": "tag_metadata_or_result",
+      "fallback_capabilities": [
+        "datafinder.openapi.tag_v2"
+      ],
+      "unsupported_when": [
+        "environment uses only tag V2.0"
+      ]
+    },
+    {
+      "category": "user_level_query",
+      "capability_id": "datafinder.openapi.tag_v2",
+      "status": "available_after_config",
+      "datafinder_area": "用户标签V2.0",
+      "supported_intents": [
+        "tag_query",
+        "tag_compute"
+      ],
+      "templates": [
+        "tag.query"
+      ],
+      "required_slots": [
+        "tenant_id",
+        "project_id_or_header",
+        "tag_id_or_name"
+      ],
+      "optional_slots": [
+        "operation"
+      ],
+      "constraints": {
+        "requires_openapi_config": true,
+        "tag_version": "v2"
+      },
+      "output": "tag_metadata_or_result",
+      "fallback_capabilities": [
+        "datafinder.openapi.tag_v1"
+      ],
+      "unsupported_when": [
+        "environment uses only tag V1.0"
+      ]
+    },
+    {
+      "category": "raw_diagnostics",
+      "capability_id": "datafinder.kafka.behavior_event",
+      "status": "available_after_config",
+      "datafinder_area": "数据治理/Kafka",
+      "supported_intents": [
+        "raw_event_debug",
+        "realtime_event_sample",
+        "custom_metric_raw"
+      ],
+      "templates": [
+        "kafka.behavior_event_sample"
+      ],
+      "required_slots": [
+        "broker_or_zk",
+        "topic",
+        "consumer_group",
+        "app_id"
+      ],
+      "optional_slots": [
+        "time_range",
+        "event_name",
+        "sample_limit",
+        "offset_policy"
+      ],
+      "constraints": {
+        "requires_kafka_config": true,
+        "supports_raw_events": true,
+        "supports_realtime": true
+      },
+      "output": "raw_behavior_events",
+      "fallback_capabilities": [
+        "datafinder.openapi.raw_event_export"
+      ],
+      "unsupported_when": [
+        "Kafka access is unavailable"
+      ]
+    },
+    {
+      "category": "raw_diagnostics",
+      "capability_id": "datafinder.kafka.user_profile",
+      "status": "available_after_config",
+      "datafinder_area": "数据治理/Kafka",
+      "supported_intents": [
+        "raw_user_profile_debug"
+      ],
+      "templates": [
+        "kafka.user_profile_sample"
+      ],
+      "required_slots": [
+        "broker_or_zk",
+        "topic",
+        "consumer_group",
+        "app_id"
+      ],
+      "optional_slots": [
+        "user_id",
+        "sample_limit"
+      ],
+      "constraints": {
+        "requires_kafka_config": true,
+        "supports_raw_events": true
+      },
+      "output": "raw_user_profile_events",
+      "fallback_capabilities": [
+        "datafinder.openapi.user_property_export"
+      ],
+      "unsupported_when": [
+        "Kafka access is unavailable"
+      ]
+    },
+    {
+      "category": "raw_diagnostics",
+      "capability_id": "datafinder.openapi.raw_event_export",
+      "status": "available_after_config",
+      "datafinder_area": "原始事件属性数据导出",
+      "supported_intents": [
+        "raw_export",
+        "raw_event_debug"
+      ],
+      "templates": [
+        "raw_event.file_list",
+        "raw_event.custom_export"
+      ],
+      "required_slots": [
+        "app_id",
+        "export_type"
+      ],
+      "optional_slots": [
+        "time_range",
+        "event_name",
+        "fields"
+      ],
+      "constraints": {
+        "requires_openapi_config": true,
+        "supports_raw_events": true
+      },
+      "output": "raw_event_files",
+      "fallback_capabilities": [
+        "datafinder.kafka.behavior_event"
+      ],
+      "unsupported_when": [
+        "request needs immediate realtime stream"
+      ]
+    },
+    {
+      "category": "raw_diagnostics",
+      "capability_id": "datafinder.openapi.metadata_query",
+      "status": "available_after_config",
+      "datafinder_area": "元数据",
+      "supported_intents": [
+        "metadata_query",
+        "event_schema_lookup",
+        "property_schema_lookup"
+      ],
+      "templates": [
+        "metadata.events",
+        "metadata.event_properties",
+        "metadata.user_properties",
+        "metadata.virtual_events",
+        "metadata.virtual_properties"
+      ],
+      "required_slots": [
+        "app_id",
+        "metadata_type"
+      ],
+      "optional_slots": [
+        "keyword",
+        "event_name"
+      ],
+      "constraints": {
+        "requires_openapi_config": true
+      },
+      "output": "metadata_records",
+      "fallback_capabilities": [],
+      "unsupported_when": [
+        "request needs metric computation"
+      ]
+    },
+    {
+      "category": "raw_diagnostics",
+      "capability_id": "datafinder.openapi.usage_stats",
+      "status": "available_after_config",
+      "datafinder_area": "用量统计",
+      "supported_intents": [
+        "usage_stats"
+      ],
+      "templates": [
+        "usage.day",
+        "usage.month"
+      ],
+      "required_slots": [
+        "app_id",
+        "time_range",
+        "granularity"
+      ],
+      "optional_slots": [
+        "subject_id"
+      ],
+      "constraints": {
+        "requires_openapi_config": true
+      },
+      "output": "usage_statistics",
+      "fallback_capabilities": [],
+      "unsupported_when": [
+        "request asks for product behavior DAU rather than product usage/cost"
+      ]
+    }
+  ]
+}

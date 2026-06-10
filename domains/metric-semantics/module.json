@@ -1,0 +1,16 @@
+{
+  "id": "metric-semantics",
+  "description": "DAU口径/身份键/nextopd公共参数/默认指标定义",
+  "truth_source": "nextop 源码（tea_reporter.go + nextop.defaults.json）",
+  "serves": ["knowledge-store/data-model.json"],
+  "update": {
+    "type": "script",
+    "cmd": "python3 domains/metric-semantics/extract_data_model.py"
+  },
+  "check": {
+    "type": "script",
+    "cmd": "python3 domains/knowledge-update/check_freshness.py metric-semantics",
+    "stale_after_hours": 24
+  },
+  "doc_links": []
+}

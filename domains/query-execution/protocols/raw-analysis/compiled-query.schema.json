@@ -1,0 +1,276 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nextop.local/schemas/compiled-query.schema.json",
+  "title": "Nextop Data Analytics CompiledQuery",
+  "type": "object",
+  "required": [
+    "status",
+    "compiled_id",
+    "plan_id",
+    "source",
+    "capability_id",
+    "template_id",
+    "execution_kind",
+    "warnings"
+  ],
+  "properties": {
+    "status": {
+      "type": "string",
+      "enum": ["ready", "blocked"]
+    },
+    "compiled_id": {
+      "type": "string"
+    },
+    "plan_id": {
+      "type": "string"
+    },
+    "source": {
+      "type": "string",
+      "enum": ["datafinder_openapi", "datafinder_kafka", "local_file"]
+    },
+    "capability_id": {
+      "type": "string"
+    },
+    "template_id": {
+      "type": "string"
+    },
+    "execution_kind": {
+      "type": "string",
+      "enum": ["openapi", "kafka", "local_sql", "local_file_parse"]
+    },
+    "blocked_reason": {
+      "type": "string",
+      "enum": [
+        "missing_config",
+        "missing_auth",
+        "unsupported_template",
+        "missing_endpoint_mapping",
+        "missing_local_file",
+        "unsafe_query"
+      ]
+    },
+    "required_to_unblock": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "openapi": {
+      "type": "object",
+      "required": ["method", "base_url", "path", "headers", "auth", "body"],
+      "properties": {
+        "method": {
+          "type": "string",
+          "enum": ["GET", "POST"]
+        },
+        "base_url": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        },
+        "query": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "headers": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "auth": {
+          "type": "object",
+          "required": ["type", "configured"],
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": ["volcengine_ak_sk", "bearer", "none"]
+            },
+            "configured": {
+              "type": "boolean"
+            },
+            "redacted_ref": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        },
+        "body": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      },
+      "additionalProperties": false
+    },
+    "kafka": {
+      "type": "object",
+      "required": ["topic", "consumer_group", "connection_ref", "offset_policy", "sample_limit"],
+      "properties": {
+        "topic": {
+          "type": "string"
+        },
+        "consumer_group": {
+          "type": "string"
+        },
+        "connection_ref": {
+          "type": "string"
+        },
+        "offset_policy": {
+          "type": "string"
+        },
+        "sample_limit": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "filters": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["field", "op", "value"],
+            "properties": {
+              "field": { "type": "string" },
+              "op": { "type": "string" },
+              "value": {}
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "local_sql": {
+      "type": "object",
+      "required": ["engine", "input_files", "sql"],
+      "properties": {
+        "engine": {
+          "type": "string",
+          "enum": ["duckdb", "sqlite"]
+        },
+        "input_files": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "sql": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "local_file": {
+      "type": "object",
+      "required": ["input_files", "parser"],
+      "properties": {
+        "input_files": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "parser": {
+          "type": "string",
+          "enum": ["csv", "ndjson", "json"]
+        },
+        "schema_hint": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "preflight": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "check_openapi_config",
+          "check_auth_config",
+          "check_app_id",
+          "check_kafka_config",
+          "check_topic",
+          "check_local_file_exists",
+          "check_sql_readonly"
+        ]
+      }
+    },
+    "postflight": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "check_http_success",
+          "check_empty_result",
+          "check_date_coverage",
+          "check_identity_null_rate",
+          "check_row_limit",
+          "check_schema_parseability",
+          "check_sample_size"
+        ]
+      }
+    },
+    "redactions": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "docs": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "warnings": {
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": { "status": { "const": "ready" } },
+        "required": ["status"]
+      },
+      "then": {
+        "required": ["preflight", "postflight"]
+      }
+    },
+    {
+      "if": {
+        "properties": { "status": { "const": "blocked" } },
+        "required": ["status"]
+      },
+      "then": {
+        "required": ["blocked_reason", "required_to_unblock"]
+      }
+    },
+    {
+      "if": {
+        "properties": { "execution_kind": { "const": "openapi" } },
+        "required": ["execution_kind"]
+      },
+      "then": {
+        "required": ["openapi"]
+      }
+    },
+    {
+      "if": {
+        "properties": { "execution_kind": { "const": "kafka" } },
+        "required": ["execution_kind"]
+      },
+      "then": {
+        "required": ["kafka"]
+      }
+    },
+    {
+      "if": {
+        "properties": { "execution_kind": { "const": "local_sql" } },
+        "required": ["execution_kind"]
+      },
+      "then": {
+        "required": ["local_sql"]
+      }
+    },
+    {
+      "if": {
+        "properties": { "execution_kind": { "const": "local_file_parse" } },
+        "required": ["execution_kind"]
+      },
+      "then": {
+        "required": ["local_file"]
+      }
+    }
+  ],
+  "additionalProperties": false
+}

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Nextop Data Analytics"
+  short_description: "Analyze nextop DataFinder data."
+  default_prompt: "Analyze nextop analytics data. First identify the metric, DataFinder interface, app_id, time range, identity key, and validation checks; then query or compute the result with clear caveats."
