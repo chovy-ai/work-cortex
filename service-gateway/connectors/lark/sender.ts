@@ -23,6 +23,16 @@ export class LarkSender implements ConnectorPort {
     await this.send(conversation, ["--markdown", summaryMarkdown]);
   }
 
+  /** 对源消息贴表情回应（emoji_type 见飞书表情文案说明；"OK" 已实测有效） */
+  async react(conversation: Conversation, emojiType: string): Promise<void> {
+    if (!conversation.source_message_id) throw new Error("react requires source_message_id");
+    await this.exec([
+      "im", "reactions", "create", "--as", "bot",
+      "--params", JSON.stringify({ message_id: conversation.source_message_id }),
+      "--data", JSON.stringify({ reaction_type: { emoji_type: emojiType } }),
+    ]);
+  }
+
   private async send(conversation: Conversation, contentArgs: string[]): Promise<void> {
     // 显式钉死 bot 身份（设计语义），不依赖 lark-cli 的 auto-detect
     const args = conversation.source_message_id

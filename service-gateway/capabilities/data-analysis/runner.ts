@@ -1,4 +1,7 @@
 import { spawn } from "node:child_process";
+import { readFileSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { Readable, Writable } from "node:stream";
 import {
   ClientSideConnection,
@@ -147,8 +150,36 @@ export function createAcpRunner(opts: AcpRunnerOpts): RunnerFn {
   };
 }
 
+// persona.md 与源码同目录（不参与编译），每次 run 现读——调性格改文件即可，无需重建
+const PERSONA_PATH = join(
+  resolve(dirname(fileURLToPath(import.meta.url)), "..", "..", ".."),
+  "capabilities",
+  "data-analysis",
+  "persona.md",
+);
+
+const EMOJI_LEARNED_PATH = join(dirname(PERSONA_PATH), "emoji-learned.md");
+
+function loadPersona(): string {
+  let text = "";
+  try {
+    text = readFileSync(PERSONA_PATH, "utf-8").trim();
+  } catch {
+    return ""; // persona 缺失不挡执行
+  }
+  try {
+    // 机器沉淀的表情用法（learn_emoji 工具产出）存在时自动追加
+    text += "\n\n" + readFileSync(EMOJI_LEARNED_PATH, "utf-8").trim();
+  } catch {
+    /* 还没沉淀过，正常 */
+  }
+  return text;
+}
+
 function buildPrompt(task: Task): string {
   return [
+    loadPersona(),
+    "",
     "你是数据分析执行器，按 skills/nextop-data-analytics/SKILL.md 工作。",
     "本次只允许走 dashboard 路径（已有报表查询）；禁止 raw_analysis。",
     "",

@@ -16,6 +16,12 @@ export interface RunRecord {
 /** 进度文本外发的最小间隔（用户要求执行过程可见，2026-06-12；M1 卡片替代） */
 const PROGRESS_INTERVAL_MS = 30_000;
 
+// 回执用飞书 reaction（真表情包），文本短代码实测不渲染已弃用（2026-06-12）。
+// 测试用这些常量过滤非业务回复，改文案时保持前缀可识别。
+export const RECEIPT_REACTION = "OK";
+export const RECEIPT_TEXT = "收到，正在分析…（通常需要几分钟）"; // 渠道不支持 reaction 时的降级
+export const PROGRESS_PREFIX = "分析中：";
+
 export interface SessionsOpts {
   capabilityId: string;
   timeoutSec: number;
@@ -84,7 +90,7 @@ export class Sessions {
         const now = Date.now();
         if (now - rec.lastProgressSentAt >= PROGRESS_INTERVAL_MS) {
           rec.lastProgressSentAt = now;
-          this.deliver(rec, (s) => s.sendText(rec.conversation, `⏳ 分析中：${ev.status.slice(0, 120)}`));
+          this.deliver(rec, (s) => s.sendText(rec.conversation, `${PROGRESS_PREFIX}${ev.status.slice(0, 120)}`));
         }
         return;
       }
@@ -139,7 +145,19 @@ export class Sessions {
     this.activeByConv.set(key, runId);
     this.runConv.set(runId, key);
     this.opts.log("info", "sessions", "run started", { run_id: runId, conv: key });
-    this.deliver(rec, (s) => s.sendText(rec.conversation, "✅ 收到，正在分析…（通常需要几分钟）"));
+    // 回执：优先 reaction（贴在源消息上，真飞书表情）；渠道不支持或失败 → 降级文本
+    const sender = this.opts.sender;
+    if (sender.react && rec.conversation.source_message_id) {
+      void sender.react(rec.conversation, RECEIPT_REACTION).catch((err) => {
+        this.opts.log("warn", "sessions", "receipt reaction failed, falling back to text", {
+          run_id: runId,
+          error: String(err).slice(0, 200),
+        });
+        this.deliver(rec, (s) => s.sendText(rec.conversation, RECEIPT_TEXT));
+      });
+    } else {
+      this.deliver(rec, (s) => s.sendText(rec.conversation, RECEIPT_TEXT));
+    }
     this.opts.submit(task);
   }
 

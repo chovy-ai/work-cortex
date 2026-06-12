@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { Sessions } from "../core/sessions.js";
+import { Sessions, RECEIPT_TEXT, PROGRESS_PREFIX, RECEIPT_REACTION } from "../core/sessions.js";
 import { silentLogger } from "../core/log.js";
 import type { ConnectorPort, Conversation, Envelope, Task, TaskEvent } from "../core/contracts.js";
 
@@ -46,11 +46,40 @@ function harness(pendingLimit = 10) {
   const errorEvent = (runId: string, reason = "炸了"): TaskEvent => ({
     v: 1, run_id: runId, seq: 1, at: new Date().toISOString(), kind: "error", reason,
   });
-  const replies = () => sent.filter((m) => !m.body.startsWith("\u2705") && !m.body.startsWith("\u23f3"));
+  const replies = () => sent.filter((m) => !m.body.startsWith(RECEIPT_TEXT) && !m.body.startsWith(PROGRESS_PREFIX));
   return { sessions, submitted, sent, replies, resultEvent, errorEvent };
 }
 
 const tick = () => new Promise((r) => setImmediate(r));
+
+test("receipt uses reaction when sender supports it; falls back to text otherwise", async () => {
+  // 带 react 的 sender：回执走 reaction，不发文本
+  const reacted: string[] = [];
+  const sent: string[] = [];
+  const sender = {
+    async sendText(_c: Conversation, t: string) {
+      sent.push(t);
+    },
+    async sendResult() {},
+    async react(_c: Conversation, emoji: string) {
+      reacted.push(emoji);
+    },
+  };
+  const s1 = new Sessions({
+    capabilityId: "data-analysis", timeoutSec: 600, pendingLimit: 10, terminalKeep: 512,
+    submit: () => {}, sender, log: silentLogger,
+  });
+  s1.handleEnvelope(env("r1"));
+  await tick();
+  assert.deepEqual(reacted, [RECEIPT_REACTION]);
+  assert.equal(sent.filter((t) => t.startsWith(RECEIPT_TEXT)).length, 0);
+
+  // 不带 react 的 sender（harness 默认）：降级文本回执
+  const h = harness();
+  h.sessions.handleEnvelope(env("r2"));
+  await tick();
+  assert.equal(h.sent.filter((m) => m.body.startsWith(RECEIPT_TEXT)).length, 1);
+});
 
 test("p2p message starts run; valid Task submitted", () => {
   const h = harness();

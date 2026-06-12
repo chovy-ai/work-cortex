@@ -62,7 +62,7 @@ interface RunRecord {
 |---|---|
 | `result` | run → done；解码 conversation_ref → sender.send_result |
 | `error` | run → failed；→ sender.send_text（「分析失败：…」） |
-| `progress` | 节流外发文本（≥30s 间隔，「⏳ 分析中：…」）+ 开跑即发回执「✅ 收到，正在分析…」——用户要求执行过程可见（2026-06-12，联调期修订）；M1 进度卡片原地更新替代 |
+| `progress` | 节流外发文本（≥30s 间隔，「[思考] 分析中：…」）+ 开跑即发回执「[OK] 收到，正在分析…」——用户要求执行过程可见（2026-06-12）；文案前缀用飞书表情短代码而非 unicode emoji（用户偏好）；M1 进度卡片原地更新替代 |
 | `ask` / `signal` | M0 不应出现；出现即 warn 日志 + 该 run 按 error 收尾 |
 
 ## 关键流程

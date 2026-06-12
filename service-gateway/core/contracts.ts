@@ -78,6 +78,8 @@ export type RunnerFn = (
 export interface ConnectorPort {
   sendText(conversation: Conversation, text: string): Promise<void>;
   sendResult(conversation: Conversation, runId: string, summaryMarkdown: string): Promise<void>;
+  /** 可选：对源消息贴表情回应（飞书 reaction）。不支持的渠道不实现，core 自动降级为文本。 */
+  react?(conversation: Conversation, emojiType: string): Promise<void>;
 }
 
 export function encodeConversationRef(channel: string, conversation: Conversation): string {
