@@ -50,7 +50,6 @@ export function createAcpRunner(opts: AcpRunnerOpts): RunnerFn {
     // 只保留「最后一次工具调用之后」的消息段作为最终回复——claude code 在
     // 工具调用之间也会流式输出旁白，整段累积会把执行过程当成答案发出去
     let segmentText = "";
-    let lastProgressTitle = "";
 
     const client: Client = {
       async requestPermission(p: RequestPermissionRequest): Promise<RequestPermissionResponse> {
@@ -70,11 +69,10 @@ export function createAcpRunner(opts: AcpRunnerOpts): RunnerFn {
             segmentText += u.content.text;
           } else if (u.sessionUpdate === "tool_call") {
             segmentText = ""; // 工具调用开始 → 之前的文本是旁白，重开一段
-            const title = (u as { title?: string }).title ?? "执行中";
-            if (title !== lastProgressTitle) {
-              lastProgressTitle = title;
-              emit({ kind: "progress", status: title });
-            }
+            // 用户只看「在干嘛」，不暴露命令/路径（用户反馈，2026-06-12）；原始 title 留 debug 日志排查用
+            const { title, kind } = u as { title?: string; kind?: string | null };
+            log("debug", "runner.acp", "tool call", { run_id: task.run_id, title: (title ?? "").slice(0, 200) });
+            emit({ kind: "progress", status: describeToolKind(kind) });
           }
           // plan / available_commands_update / current_mode_update 等其余更新：忽略
         } catch (err) {

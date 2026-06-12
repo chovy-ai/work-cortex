@@ -20,7 +20,7 @@ const PROGRESS_INTERVAL_MS = 30_000;
 // 回执用飞书 reaction 做状态指示器（用户定，2026-06-12）：
 // 贴 💪 = 正在工作中；回复发出前撤掉。文本短代码实测不渲染已弃用。
 // 测试用这些常量过滤非业务回复，改文案时保持前缀可识别。
-export const RECEIPT_REACTION = "MUSCLE"; // 💪 工作中（create/delete 均已实测）
+export const RECEIPT_REACTION = "Typing"; // 敲键盘 = 工作中（用户定；key 大小写敏感，"TYPING" 无效）
 export const RECEIPT_TEXT = "收到，正在分析…（通常需要几分钟）"; // 渠道不支持 reaction 时的降级
 export const PROGRESS_PREFIX = "分析中：";
 
