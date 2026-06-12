@@ -204,7 +204,7 @@ function buildPrompt(task: Task): string {
     "本次只允许走 dashboard 路径（已有报表查询）；禁止 raw_analysis。",
     "",
     "硬性约束（违反任何一条都是错误）：",
-    "- 数据查询只能用仓库既有工具（domains/datafinder-interface/cli.py 等，凭据在 .env.local）；",
+    "- 数据查询只能用仓库既有工具（node build/domains/datafinder-interface/cli.js …，凭据在 .env.local；build/ 缺失先 npm run build:tools）；",
     "- 禁止安装任何依赖（pip / npm）；禁止访问外部网页或在线文档；",
     "- 工具调用失败或数据不可得时：立即停止尝试，不要修环境、不要查文档、不要换方案，",
     "  直接按下述格式回复「无法回答 + 具体失败原因」。快速诚实的失败远好于长时间无响应；",
