@@ -68,11 +68,14 @@ export function createAcpRunner(opts: AcpRunnerOpts): RunnerFn {
           if (u.sessionUpdate === "agent_message_chunk" && u.content.type === "text") {
             segmentText += u.content.text;
           } else if (u.sessionUpdate === "tool_call") {
+            // 进度要讲清「在干嘛 + 目的」（用户反馈，2026-06-12）：优先用 agent 调工具前的
+            // 旁白（buildPrompt 已要求它一句中文说明意图），没有旁白才退回 kind 兜底文案；
+            // 不暴露命令/路径，原始 title 留 debug 日志排查用
+            const narration = narrationToProgress(segmentText);
             segmentText = ""; // 工具调用开始 → 之前的文本是旁白，重开一段
-            // 用户只看「在干嘛」，不暴露命令/路径（用户反馈，2026-06-12）；原始 title 留 debug 日志排查用
             const { title, kind } = u as { title?: string; kind?: string | null };
             log("debug", "runner.acp", "tool call", { run_id: task.run_id, title: (title ?? "").slice(0, 200) });
-            emit({ kind: "progress", status: describeToolKind(kind) });
+            emit({ kind: "progress", status: narration ?? describeToolKind(kind) });
           }
           // plan / available_commands_update / current_mode_update 等其余更新：忽略
         } catch (err) {
@@ -148,7 +151,23 @@ export function createAcpRunner(opts: AcpRunnerOpts): RunnerFn {
   };
 }
 
-/** ACP ToolKind → 用户可读的进度文案（sessions 侧 30s 节流，这里每次工具调用都上报） */
+/**
+ * 工具调用前的旁白 → 进度文案：取最后一个非空行（最贴近本次调用的意图），
+ * 去掉 markdown 修饰，超长截断。旁白含代码块/命令痕迹时放弃，避免把执行细节漏给用户。
+ */
+function narrationToProgress(text: string): string | null {
+  const line =
+    text
+      .trim()
+      .split("\n")
+      .map((s) => s.replace(/^[#>*\-\d.、\s]+/, "").trim())
+      .filter(Boolean)
+      .pop() ?? "";
+  if (!line || line.includes("`") || line.includes("/")) return null;
+  return line.length > 60 ? `${line.slice(0, 60)}…` : line;
+}
+
+/** ACP ToolKind → 进度兜底文案（agent 没给旁白时用；sessions 侧 30s 节流） */
 function describeToolKind(kind: string | null | undefined): string {
   switch (kind) {
     case "read":
@@ -209,6 +228,10 @@ function buildPrompt(task: Task): string {
     "- 工具调用失败或数据不可得时：立即停止尝试，不要修环境、不要查文档、不要换方案，",
     "  直接按下述格式回复「无法回答 + 具体失败原因」。快速诚实的失败远好于长时间无响应；",
     "- 总预算约 8 分钟，超时会被强制终止，用户只会看到一条超时报错。",
+    "",
+    "执行过程对提问者可见：每次调用工具之前，先单独输出一句简短中文旁白（20 字以内），",
+    "说明接下来这一步在做什么、目的是什么（如「查指标口径，确认渗透率怎么算」）；",
+    "旁白里禁止出现命令、代码、文件路径或英文术语。",
     "",
     "你的最终回复将被原样发给飞书提问者，要求：",
     "- 用中文回复，面向业务同学（不是工程师）；",
