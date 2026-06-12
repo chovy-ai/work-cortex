@@ -148,6 +148,28 @@ export function createAcpRunner(opts: AcpRunnerOpts): RunnerFn {
   };
 }
 
+/** ACP ToolKind → 用户可读的进度文案（sessions 侧 30s 节流，这里每次工具调用都上报） */
+function describeToolKind(kind: string | null | undefined): string {
+  switch (kind) {
+    case "read":
+      return "查看数据文件";
+    case "execute":
+      return "执行数据查询";
+    case "search":
+      return "检索相关数据";
+    case "fetch":
+      return "获取数据";
+    case "think":
+      return "梳理分析思路";
+    case "edit":
+    case "delete":
+    case "move":
+      return "整理输出";
+    default:
+      return "处理中";
+  }
+}
+
 // persona.md 与源码同目录（不参与编译），每次 run 现读——调性格改文件即可，无需重建
 const PERSONA_PATH = join(
   resolve(dirname(fileURLToPath(import.meta.url)), "..", "..", ".."),
