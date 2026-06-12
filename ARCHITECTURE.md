@@ -64,23 +64,23 @@ data-analysis/
 │   ├── event-knowledge/                   # ① 代码事件知识域
 │   │   ├── module.json                    # Updater 契约（type=script）
 │   │   ├── sync_nextop.sh                 # git clone / pull nextop 仓库
-│   │   └── extract_events.py              # 解析源码 → event-catalog.json
+│   │   └── extract_events.ts              # 解析源码 → event-catalog.json
 │   │
 │   ├── datafinder-interface/              # ② DataFinder 接口域
 │   │   ├── module.json                    # Updater 契约（type=agent，含 doc_links）
 │   │   ├── manifest.json                  # 端点定义（method/path/params/doc_url）
-│   │   ├── client.py                      # DataFinderClient + call() + 类型化 wrappers
-│   │   ├── cli.py                         # python3 -m cli list/describe/call
+│   │   ├── client.ts                      # DataFinderClient + call() + 类型化 wrappers
+│   │   ├── cli.ts                         # node build/.../cli.js list/describe/call
 │   │   ├── UPDATE.md                      # agent 更新流程（WebFetch 文档 → 改 manifest）
-│   │   └── __init__.py
+│   │   └── index.ts
 │   │
 │   ├── metric-semantics/                  # ③ 口径语义域
 │   │   ├── module.json                    # Updater 契约（type=script，待补）
-│   │   ├── extract_data_model.py          # 🆕 待建：从 nextop 代码提取
+│   │   ├── extract_data_model.ts          # 🆕 待建：从 nextop 代码提取
 │   │   └── data-model-protocol.md         # 手写口径规范（过渡期）
 │   │
 │   ├── knowledge-update/                  # ④ 知识更新触发域（控制平面）
-│   │   └── update_knowledge.py            # 🆕 待建：status() / update(id|all)
+│   │   └── update_knowledge.ts            # 🆕 待建：status() / update(id|all)
 │   │
 │   ├── intent-routing/                    # ⑤ 意图路由域
 │   │   ├── capabilities.json              # CapabilitySpec（目标：从①②③派生/校验）
@@ -91,28 +91,28 @@ data-analysis/
 │   └── query-execution/                   # ⑥ 查询执行域
 │       ├── scheduler/
 │       │   ├── workflow.json              # 🆕 声明式 step 图 + back-edges + 重试上限
-│       │   └── scheduler.py              # 🆕 StepScheduler（状态机循环 + 持久化 + resume）
+│       │   └── scheduler.ts              # 🆕 StepScheduler（状态机循环 + 持久化 + resume）
 │       ├── steps/
-│       │   ├── understand.py              # S1：NL → QueryIntent（调 ⑤）
-│       │   ├── route.py                   # S2：按 query_path 分叉
+│       │   ├── understand.ts              # S1：NL → QueryIntent（调 ⑤）
+│       │   ├── route.ts                   # S2：按 query_path 分叉
 │       │   ├── dashboard/                 # Path A（无评审门）
-│       │   │   ├── resolve.py             # 4A：确认 report_id / dashboard_id
-│       │   │   ├── plan.py                # 5A：QueryPlan（仅时间范围）
-│       │   │   ├── compile.py             # 6A：CompiledQuery
-│       │   │   ├── execute.py             # 7A：调用 ② DataFinder
-│       │   │   └── report.py              # 8A：输出 ExecutionResult
+│       │   │   ├── resolve.ts             # 4A：确认 report_id / dashboard_id
+│       │   │   ├── plan.ts                # 5A：QueryPlan（仅时间范围）
+│       │   │   ├── compile.ts             # 6A：CompiledQuery
+│       │   │   ├── execute.ts             # 7A：调用 ② DataFinder
+│       │   │   └── report.ts              # 8A：输出 ExecutionResult
 │       │   └── raw-analysis/              # Path B（含两道 gate）
-│       │       ├── prepare.py             # 4B–5B：加载口径 + 选数据路径
-│       │       ├── auto_review.py         # 6B：[gate] subagent 自动评审
-│       │       ├── user_review.py         # 7B：[human_gate] await_input
-│       │       ├── plan.py                # 8B：QueryPlan
-│       │       ├── compile.py             # 9B：CompiledQuery
-│       │       ├── execute.py             # 10B：调用 ② / kafka / local
-│       │       ├── validate.py            # 11B：[gate] 质量校验
-│       │       └── report.py              # 输出 ExecutionResult
+│       │       ├── prepare.ts             # 4B–5B：加载口径 + 选数据路径
+│       │       ├── auto_review.ts         # 6B：[gate] subagent 自动评审
+│       │       ├── user_review.ts         # 7B：[human_gate] await_input
+│       │       ├── plan.ts                # 8B：QueryPlan
+│       │       ├── compile.ts             # 9B：CompiledQuery
+│       │       ├── execute.ts             # 10B：调用 ② / kafka / local
+│       │       ├── validate.ts            # 11B：[gate] 质量校验
+│       │       └── report.ts              # 输出 ExecutionResult
 │       ├── executors/
-│       │   ├── kafka_executor.py          # Kafka 原始事件采样
-│       │   └── local_executor.py          # 本地 CSV/NDJSON（DuckDB）
+│       │   ├── kafka_executor.ts          # Kafka 原始事件采样
+│       │   └── local_executor.ts          # 本地 CSV/NDJSON（DuckDB）
 │       └── protocols/                     # 各步骤的 I/O 契约（schema + 协议文档）
 │           ├── dashboard/
 │           │   ├── query-plan-protocol.md
@@ -145,10 +145,10 @@ data-analysis/
 现状路径                                              → 目标路径
 ─────────────────────────────────────────────────────────────────────
 skills/nextop-data-analytics/tools/sync_nextop.sh    → domains/event-knowledge/sync_nextop.sh
-skills/nextop-data-analytics/tools/extract_events.py → domains/event-knowledge/extract_events.py
+skills/nextop-data-analytics/tools/extract_events.ts → domains/event-knowledge/extract_events.ts
 skills/nextop-data-analytics/tools/datafinder/      → domains/datafinder-interface/
-skills/nextop-data-analytics/tools/kafka_executor.py → domains/query-execution/executors/kafka_executor.py
-skills/nextop-data-analytics/tools/local_executor.py → domains/query-execution/executors/local_executor.py
+skills/nextop-data-analytics/tools/kafka_executor.ts → domains/query-execution/executors/kafka_executor.ts
+skills/nextop-data-analytics/tools/local_executor.ts → domains/query-execution/executors/local_executor.ts
 references/common/capabilities.json                 → domains/intent-routing/capabilities.json
 references/common/query-intent-protocol.md          → domains/intent-routing/query-intent-protocol.md
 references/common/query-intent.schema.json          → domains/intent-routing/query-intent.schema.json
@@ -177,7 +177,7 @@ flowchart TB
     subgraph UPDATE_PIPELINE["知识更新链路（写 · 离线/按需）"]
         direction TB
         TRIG([维护者 / 定时 / 过期检测])
-        D4["④ 知识更新触发域\nupdate_knowledge.py\nstatus() / update(id|all)"]
+        D4["④ 知识更新触发域\nupdate_knowledge.ts\nstatus() / update(id|all)"]
 
         subgraph UPDATERS["各域 Updater（实现 module.json 契约）"]
             direction LR
@@ -295,11 +295,11 @@ stateDiagram-v2
   "serves": ["knowledge-store/event-catalog.json"],
   "update": {
     "type": "script",                        // script=自动 | agent=需 LLM 介入
-    "cmd": "domains/event-knowledge/sync_nextop.sh && python3 domains/event-knowledge/extract_events.py"
+    "cmd": "domains/event-knowledge/sync_nextop.sh && python3 domains/event-knowledge/extract_events.ts"
   },
   "check": {
     "type": "script",
-    "cmd": "python3 domains/knowledge-update/check_freshness.py event-knowledge"
+    "cmd": "python3 domains/knowledge-update/check_freshness.ts event-knowledge"
   },
   "doc_links": []
 }
@@ -338,10 +338,12 @@ StepOutcome =
 
 ## 七、建设路线图
 
+> **实现语言约定（2026-06-12 更新）**：全仓库 TypeScript（用户决定全量迁移，Python 已清零）。工具经根目录 `npm run build:tools` 编译到 `build/`，以 `node build/domains/.../x.js` 调用。
+
 | 阶段 | 内容 | 依赖 |
 |---|---|---|
 | **P0（现已完成）** | ① 事件知识域闭环、② DataFinder 接口域闭环 | — |
-| **P1（下一步）** | 补 `module.json` × 3（①②③）；建 ④ `update_knowledge.py` 骨架 | P0 |
-| **P2** | ③ 口径语义域闭环（`extract_data_model.py`）；目录迁移到目标结构 | P1 |
-| **P3** | ⑥ 调度器骨架（`workflow.json` + `scheduler.py`）；steps 薄封装现有协议 | P2 |
+| **P1（下一步）** | 补 `module.json` × 3（①②③）；建 ④ `update_knowledge.ts` 骨架 | P0 |
+| **P2** | ③ 口径语义域闭环（`extract_data_model.ts`）；目录迁移到目标结构 | P1 |
+| **P3** | ⑥ 调度器骨架（`workflow.json` + `scheduler.ts`）；steps 薄封装现有协议 | P2 |
 | **P4** | ⑤ `capabilities.json` 改为从①②③派生/校验（消除双份维护） | P3 |

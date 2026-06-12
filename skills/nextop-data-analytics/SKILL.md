@@ -10,7 +10,7 @@ description: Analyze nextop product analytics data from 火山引擎 DataFinder 
 ### Phase 0 — Sync & Index (run once per session, or when event data feels stale)
 
 1. **Update nextop code**: Run `bash domains/event-knowledge/sync_nextop.sh` to pull the latest nextop monorepo. Skip if the user has confirmed the local copy is current.
-2. **Build event catalog**: Run `python3 domains/event-knowledge/extract_events.py` to regenerate `knowledge-store/event-catalog.json`. The catalog contains every registered analytics event with its parameter names and the source files where the event fires (上报时机). Skip if the catalog already exists and the user has not requested a refresh.
+2. **Build event catalog**: Run `node build/domains/event-knowledge/extract_events.js` to regenerate (build first if missing: `npm run build:tools`) `knowledge-store/event-catalog.json`. The catalog contains every registered analytics event with its parameter names and the source files where the event fires (上报时机). Skip if the catalog already exists and the user has not requested a refresh.
 3. **Read the catalog**: Load `knowledge-store/event-catalog.json` into context. Each entry has:
    - `event_name` — the DataFinder event identifier (e.g. `agent.message_sent`)
    - `params` — list of parameter names the event carries
@@ -78,21 +78,22 @@ All DataFinder OpenAPI calls go through the self-contained module at `domains/da
 **Discover the interface** (no credentials needed):
 
 ```
-cd tools
-python3 domains/datafinder-interface/cli.py list                 # every endpoint + summary
-python3 domains/datafinder-interface/cli.py describe <endpoint>  # one endpoint's full spec + doc URL
+node build/domains/datafinder-interface/cli.js list                 # every endpoint + summary
+node build/domains/datafinder-interface/cli.js describe <endpoint>  # one endpoint's full spec + doc URL
 ```
+
+(If `build/` is missing, run `npm run build:tools` at the repo root first.)
 
 `manifest.json` is the canonical, machine-readable definition of every endpoint (method, path, required/optional params, response shape, limits, doc URL).
 
 **Call an endpoint** (reads `.env.local`):
 
-```python
-from datafinder import DataFinderClient, load_config_from_env
-client = DataFinderClient(load_config_from_env())
-result = client.call("dashboard.list", {})            # generic, manifest-validated
-result = client.query_report(report_id="…", start_date="…", end_date="…")  # typed wrapper
 ```
+node build/domains/datafinder-interface/cli.js call dashboard.list
+node build/domains/datafinder-interface/cli.js call report.query --params '{"report_id":"…","start_time":"…","end_time":"…"}'
+```
+
+Programmatic use (TypeScript): `import { DataFinderClient, loadConfigFromEnv } from "domains/datafinder-interface/index.js"`.
 
 **When an endpoint is missing or its path is unverified**: `call()` on an unknown id returns `error_code: "endpoint_not_in_manifest"`, and entries with `"path_verified": false` emit a warning. In both cases, look up the latest interface in the official docs and extend `manifest.json` following `domains/datafinder-interface/UPDATE.md`. After registration the endpoint is immediately callable. Run this update procedure whenever the docs have changed, a path returns 404, or the user asks to refresh the DataFinder interface.
 

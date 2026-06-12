@@ -6,7 +6,7 @@ It bundles three things in one place:
 1. **Complete interface definitions** — `manifest.json` declares every callable
    endpoint with its method, path, required/optional params, response shape,
    limits, and official **doc URL**.
-2. **Calling logic** — `client.py` reads the manifest, signs requests
+2. **Calling logic** — `client.ts` reads the manifest, signs requests
    (Volcengine V4 HMAC-SHA256), and exposes both a generic `call()` and typed
    wrappers.
 3. **A self-update path** — `UPDATE.md` is the procedure for refreshing the
@@ -17,16 +17,16 @@ It bundles three things in one place:
 | File | Role |
 | --- | --- |
 | `manifest.json` | Canonical interface definitions + doc URLs. Source of truth. |
-| `client.py` | `DataFinderClient` (signing, generic `call()`, typed wrappers), `load_config_from_env`. |
-| `cli.py` | `python3 domains/datafinder-interface/cli.py list / describe / call` for discovery and ad-hoc calls. |
+| `client.ts` | `DataFinderClient` (signing, generic `call()`, typed wrappers), `load_config_from_env`. |
+| `cli.ts` | `node build/domains/datafinder-interface/cli.js list / describe / call` for discovery and ad-hoc calls. |
 | `UPDATE.md` | How the agent extends/verifies the manifest from the latest docs. |
 | `__init__.py` | Public exports. |
 
 ## Discover the interface
 
 ```
-python3 domains/datafinder-interface/cli.py list                 # every endpoint + summary
-python3 domains/datafinder-interface/cli.py describe analysis.query
+node build/domains/datafinder-interface/cli.js list                 # every endpoint + summary
+node build/domains/datafinder-interface/cli.js describe analysis.query
 ```
 
 From Python:

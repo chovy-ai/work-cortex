@@ -1,0 +1,21 @@
+{
+  "name": "data-analysis-tools",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "build:tools": "tsc -p tsconfig.tools.json",
+    "test:tools": "npm run build:tools && node --test 'build/tests/*.test.js'"
+  },
+  "dependencies": {
+    "kafkajs": "^2.2.4"
+  },
+  "optionalDependencies": {
+    "duckdb": "^1.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "typescript": "^5.5.0"
+  }
+}

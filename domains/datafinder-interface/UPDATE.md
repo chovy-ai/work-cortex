@@ -67,7 +67,7 @@ Rules:
 
 ### 4. (Optional) Add a typed wrapper
 
-For frequently used endpoints, add a thin wrapper method to `client.py` that
+For frequently used endpoints, add a thin wrapper method to `client.ts` that
 calls `self.call("<id>", {...})`, and set the manifest entry's `wrapper` field
 to its name. The generic `call()` already works without a wrapper, so this is
 ergonomics only.
@@ -75,8 +75,8 @@ ergonomics only.
 ### 5. Verify
 
 ```
-python3 domains/datafinder-interface/cli.py describe <id>     # confirm the entry reads back
-python3 domains/datafinder-interface/cli.py list              # confirm it appears, no [UNVERIFIED] flag
+node build/domains/datafinder-interface/cli.js describe <id>     # confirm the entry reads back
+node build/domains/datafinder-interface/cli.js list              # confirm it appears, no [UNVERIFIED] flag
 ```
 
 Then, if credentials are configured, do a minimal live call to confirm the path

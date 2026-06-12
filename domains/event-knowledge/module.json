@@ -2,14 +2,16 @@
   "id": "event-knowledge",
   "description": "nextop 事件目录（名称/参数/上报时机）",
   "truth_source": "nextop 源码 github.com/nextop-os/nextop",
-  "serves": ["knowledge-store/event-catalog.json"],
+  "serves": [
+    "knowledge-store/event-catalog.json"
+  ],
   "update": {
     "type": "script",
-    "cmd": "bash domains/event-knowledge/sync_nextop.sh && python3 domains/event-knowledge/extract_events.py"
+    "cmd": "bash domains/event-knowledge/sync_nextop.sh && node build/domains/event-knowledge/extract_events.js"
   },
   "check": {
     "type": "script",
-    "cmd": "python3 domains/knowledge-update/check_freshness.py event-knowledge",
+    "cmd": "node build/domains/knowledge-update/check_freshness.js event-knowledge",
     "stale_after_hours": 24
   },
   "doc_links": []
