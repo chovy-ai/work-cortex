@@ -52,27 +52,38 @@ function harness(pendingLimit = 10) {
 
 const tick = () => new Promise((r) => setImmediate(r));
 
-test("receipt uses reaction when sender supports it; falls back to text otherwise", async () => {
-  // 带 react 的 sender：回执走 reaction，不发文本
-  const reacted: string[] = [];
-  const sent: string[] = [];
+test("receipt reaction lifecycle: 💪 on start, removed before reply; text fallback without react", async () => {
+  // 带 react/unreact 的 sender：开跑贴表情 → 回复前撤掉 → 再发结果（顺序断言）
+  const order: string[] = [];
+  const submitted: Task[] = [];
   const sender = {
     async sendText(_c: Conversation, t: string) {
-      sent.push(t);
+      order.push(`text:${t.slice(0, 6)}`);
     },
-    async sendResult() {},
+    async sendResult() {
+      order.push("result");
+    },
     async react(_c: Conversation, emoji: string) {
-      reacted.push(emoji);
+      order.push(`react:${emoji}`);
+      return "rid_1";
+    },
+    async unreact(_c: Conversation, handle: string) {
+      order.push(`unreact:${handle}`);
     },
   };
   const s1 = new Sessions({
     capabilityId: "data-analysis", timeoutSec: 600, pendingLimit: 10, terminalKeep: 512,
-    submit: () => {}, sender, log: silentLogger,
+    submit: (t) => submitted.push(t), sender, log: silentLogger,
   });
   s1.handleEnvelope(env("r1"));
   await tick();
-  assert.deepEqual(reacted, [RECEIPT_REACTION]);
-  assert.equal(sent.filter((t) => t.startsWith(RECEIPT_TEXT)).length, 0);
+  s1.handleEvent({
+    v: 1, run_id: submitted[0].run_id, seq: 1, at: new Date().toISOString(),
+    kind: "result", summary: "答案", tables: [], charts: [],
+  });
+  await tick();
+  await tick();
+  assert.deepEqual(order, [`react:${RECEIPT_REACTION}`, "unreact:rid_1", "result"]);
 
   // 不带 react 的 sender（harness 默认）：降级文本回执
   const h = harness();

@@ -11,14 +11,16 @@ export interface RunRecord {
   status: "running" | "done" | "failed";
   created_at: string;
   lastProgressSentAt: number; // 进度外发节流（ms epoch）
+  receiptHandle: Promise<string | null> | null; // 「工作中」reaction 句柄（回复前撤掉）
 }
 
 /** 进度文本外发的最小间隔（用户要求执行过程可见，2026-06-12；M1 卡片替代） */
 const PROGRESS_INTERVAL_MS = 30_000;
 
-// 回执用飞书 reaction（真表情包），文本短代码实测不渲染已弃用（2026-06-12）。
+// 回执用飞书 reaction 做状态指示器（用户定，2026-06-12）：
+// 贴 💪 = 正在工作中；回复发出前撤掉。文本短代码实测不渲染已弃用。
 // 测试用这些常量过滤非业务回复，改文案时保持前缀可识别。
-export const RECEIPT_REACTION = "OK";
+export const RECEIPT_REACTION = "MUSCLE"; // 💪 工作中（create/delete 均已实测）
 export const RECEIPT_TEXT = "收到，正在分析…（通常需要几分钟）"; // 渠道不支持 reaction 时的降级
 export const PROGRESS_PREFIX = "分析中：";
 
@@ -96,18 +98,20 @@ export class Sessions {
       }
       case "result":
         this.finish(rec, "done");
-        this.deliver(rec, (s) => s.sendResult(rec.conversation, rec.run_id, ev.summary));
+        this.deliverAfterClearingReceipt(rec, (s) => s.sendResult(rec.conversation, rec.run_id, ev.summary));
         return;
       case "error":
         this.finish(rec, "failed");
-        this.deliver(rec, (s) => s.sendText(rec.conversation, `分析失败：${ev.reason}`));
+        this.deliverAfterClearingReceipt(rec, (s) => s.sendText(rec.conversation, `分析失败：${ev.reason}`));
         return;
       case "ask":
       case "signal":
         // M0 不应出现（04 判定表）：warn + 按 error 收尾
         log("warn", "sessions", `unexpected ${ev.kind} in M0, failing run`, { run_id: ev.run_id });
         this.finish(rec, "failed");
-        this.deliver(rec, (s) => s.sendText(rec.conversation, "分析失败：能力返回了当前版本不支持的事件"));
+        this.deliverAfterClearingReceipt(rec, (s) =>
+          s.sendText(rec.conversation, "分析失败：能力返回了当前版本不支持的事件"),
+        );
         return;
     }
   }
@@ -140,20 +144,22 @@ export class Sessions {
       status: "running",
       created_at: new Date().toISOString(),
       lastProgressSentAt: Date.now(), // 回执已发，首条进度 30s 后再说
+      receiptHandle: null,
     };
     this.runs.set(runId, rec);
     this.activeByConv.set(key, runId);
     this.runConv.set(runId, key);
     this.opts.log("info", "sessions", "run started", { run_id: runId, conv: key });
-    // 回执：优先 reaction（贴在源消息上，真飞书表情）；渠道不支持或失败 → 降级文本
+    // 回执：贴「工作中」reaction（💪）在源消息上；渠道不支持或失败 → 降级文本
     const sender = this.opts.sender;
     if (sender.react && rec.conversation.source_message_id) {
-      void sender.react(rec.conversation, RECEIPT_REACTION).catch((err) => {
+      rec.receiptHandle = sender.react(rec.conversation, RECEIPT_REACTION).catch((err) => {
         this.opts.log("warn", "sessions", "receipt reaction failed, falling back to text", {
           run_id: runId,
           error: String(err).slice(0, 200),
         });
         this.deliver(rec, (s) => s.sendText(rec.conversation, RECEIPT_TEXT));
+        return null;
       });
     } else {
       this.deliver(rec, (s) => s.sendText(rec.conversation, RECEIPT_TEXT));
@@ -183,6 +189,30 @@ export class Sessions {
         error: String(err),
       }),
     );
+  }
+
+  /** 终态回复：先撤掉「工作中」reaction（用户定的顺序），再发回复。撤失败不挡回复。 */
+  private deliverAfterClearingReceipt(rec: RunRecord, send: (s: ConnectorPort) => Promise<void>): void {
+    void (async () => {
+      const sender = this.opts.sender;
+      if (rec.receiptHandle && sender.unreact) {
+        const handle = await rec.receiptHandle.catch(() => null);
+        if (handle) {
+          await sender.unreact(rec.conversation, handle).catch((err) =>
+            this.opts.log("warn", "sessions", "unreact failed (reply proceeds)", {
+              run_id: rec.run_id,
+              error: String(err).slice(0, 200),
+            }),
+          );
+        }
+      }
+      await send(sender).catch((err) =>
+        this.opts.log("error", "sessions", "delivery failed (run state unchanged)", {
+          run_id: rec.run_id,
+          error: String(err),
+        }),
+      );
+    })();
   }
 
   private archive(runId: string): void {

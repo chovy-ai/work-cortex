@@ -23,13 +23,28 @@ export class LarkSender implements ConnectorPort {
     await this.send(conversation, ["--markdown", summaryMarkdown]);
   }
 
-  /** 对源消息贴表情回应（emoji_type 见飞书表情文案说明；"OK" 已实测有效） */
-  async react(conversation: Conversation, emojiType: string): Promise<void> {
+  /** 对源消息贴表情回应，返回 reaction_id 句柄（"OK"/"MUSCLE" 已实测有效） */
+  async react(conversation: Conversation, emojiType: string): Promise<string | null> {
     if (!conversation.source_message_id) throw new Error("react requires source_message_id");
-    await this.exec([
+    const stdout = await this.exec([
       "im", "reactions", "create", "--as", "bot",
       "--params", JSON.stringify({ message_id: conversation.source_message_id }),
       "--data", JSON.stringify({ reaction_type: { emoji_type: emojiType } }),
+    ]);
+    try {
+      const json = JSON.parse(stdout.slice(stdout.indexOf("{"))) as { data?: { reaction_id?: string } };
+      return json.data?.reaction_id ?? null;
+    } catch {
+      return null; // 贴上了但拿不到句柄：不挡流程，只是撤不掉
+    }
+  }
+
+  /** 撤掉 reaction（回复前撤掉「工作中」表情） */
+  async unreact(conversation: Conversation, handle: string): Promise<void> {
+    if (!conversation.source_message_id) return;
+    await this.exec([
+      "im", "reactions", "delete", "--as", "bot",
+      "--params", JSON.stringify({ message_id: conversation.source_message_id, reaction_id: handle }),
     ]);
   }
 
@@ -52,11 +67,11 @@ export class LarkSender implements ConnectorPort {
     throw lastErr;
   }
 
-  private exec(args: string[]): Promise<void> {
+  private exec(args: string[]): Promise<string> {
     return new Promise((resolve, reject) => {
-      execFile(this.opts.bin, args, { timeout: 30_000, maxBuffer: 4 * 1024 * 1024 }, (err, _stdout, stderr) => {
+      execFile(this.opts.bin, args, { timeout: 30_000, maxBuffer: 4 * 1024 * 1024 }, (err, stdout, stderr) => {
         if (err) reject(new Error(`${err.message}; stderr: ${String(stderr).slice(0, 300)}`));
-        else resolve();
+        else resolve(String(stdout));
       });
     });
   }
