@@ -1,0 +1,38 @@
+{
+  "runtime": {
+    "maxConcurrent": 1,
+    "timeoutSec": 600,
+    "graceSec": 10
+  },
+  "queue": {
+    "maxSize": 1000,
+    "dedupCapacity": 4096
+  },
+  "sessions": {
+    "pendingPerConversation": 10,
+    "terminalKeep": 512
+  },
+  "capability": {
+    "id": "data-analysis",
+    "runtime": {
+      "agent": "claude-code",
+      "cmd": "node_modules/.bin/claude-code-acp",
+      "args": []
+    }
+  },
+  "lark": {
+    "bin": "lark-cli",
+    "subscribeArgs": [
+      "event",
+      "+subscribe",
+      "--as",
+      "bot",
+      "--event-types",
+      "im.message.receive_v1",
+      "--quiet"
+    ]
+  },
+  "log": {
+    "level": "info"
+  }
+}

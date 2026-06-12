@@ -5,3 +5,7 @@
 knowledge-store/event-catalog.json
 knowledge-store/data-model.json
 outputs/
+service-gateway/node_modules/
+service-gateway/dist/
+service-gateway/config.json
+build/
