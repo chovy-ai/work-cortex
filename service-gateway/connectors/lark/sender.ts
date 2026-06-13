@@ -23,6 +23,19 @@ export class LarkSender implements ConnectorPort {
     await this.send(conversation, ["--markdown", summaryMarkdown]);
   }
 
+  /** 发一条可原地更新的进度文本，返回 message_id 句柄（拿不到则 null，core 退回逐条追加）。 */
+  async sendProgress(conversation: Conversation, _runId: string, status: string): Promise<string | null> {
+    return parseMessageId(await this.send(conversation, ["--text", status]));
+  }
+
+  /** 原地更新进度消息：飞书 PATCH /im/v1/messages/:id（仅文本/富文本可改），不新增气泡。 */
+  async updateProgress(_conversation: Conversation, handle: string, status: string): Promise<void> {
+    await this.exec([
+      "api", "PATCH", `/open-apis/im/v1/messages/${handle}`, "--as", "bot",
+      "--data", JSON.stringify({ msg_type: "text", content: JSON.stringify({ text: status }) }),
+    ]);
+  }
+
   /** 对源消息贴表情回应，返回 reaction_id 句柄（"OK"/"MUSCLE" 已实测有效） */
   async react(conversation: Conversation, emojiType: string): Promise<string | null> {
     if (!conversation.source_message_id) throw new Error("react requires source_message_id");
@@ -48,7 +61,7 @@ export class LarkSender implements ConnectorPort {
     ]);
   }
 
-  private async send(conversation: Conversation, contentArgs: string[]): Promise<void> {
+  private async send(conversation: Conversation, contentArgs: string[]): Promise<string> {
     // 显式钉死 bot 身份（设计语义），不依赖 lark-cli 的 auto-detect
     const args = conversation.source_message_id
       ? ["im", "+messages-reply", "--as", "bot", "--message-id", conversation.source_message_id, "--reply-in-thread", ...contentArgs]
@@ -56,8 +69,7 @@ export class LarkSender implements ConnectorPort {
     let lastErr: unknown;
     for (let i = 0; i <= RETRIES; i++) {
       try {
-        await this.exec(args);
-        return;
+        return await this.exec(args);
       } catch (err) {
         lastErr = err;
         this.opts.log("warn", "lark.sender", "send failed", { try: i + 1, error: String(err).slice(0, 300) });
@@ -79,4 +91,14 @@ export class LarkSender implements ConnectorPort {
 
 function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
+}
+
+/** 从 lark-cli send 输出里抠 message_id（与 react 解析 reaction_id 同套路）；拿不到返回 null。 */
+function parseMessageId(stdout: string): string | null {
+  try {
+    const json = JSON.parse(stdout.slice(stdout.indexOf("{"))) as { data?: { message_id?: string } };
+    return json.data?.message_id ?? null;
+  } catch {
+    return null;
+  }
 }

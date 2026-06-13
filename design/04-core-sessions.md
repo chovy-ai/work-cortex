@@ -42,8 +42,8 @@ interface RunRecord {
 
 - 每个会话一个 FIFO 列表，元素是已翻译的 Envelope；到达顺序由 03 全局 FIFO 天然保证；
 - **同会话严格串行**：任意时刻一个会话至多一个 running run；终态（done / failed）时弹出下一条立即构造 Task 提交；
-- 有界：单会话 pending 上限 10 条，超出丢弃 + 错误日志（与溢出语义一致；防单人刷屏占满内存）；
-- 排队期间无反馈（用户已知并接受）；感知问题由 M1 进度回执自然缓解；
+- 有界：单会话 pending 上限 10 条，超出丢弃 + 错误日志 + **一次性溢出提示**（`OVERFLOW_TEXT`，每轮溢出只提示一次，成功入队后复位；防单人刷屏占满内存又不让丢弃静默无声）；
+- **排队也回执**：入队即在该消息上贴「工作中」reaction（句柄随排队项带到开跑时沿用，不重复贴），别让用户以为追问被无视；渠道无 reaction 时降级排队文案（`RECEIPT_QUEUED_TEXT`）；
 - 不跨会话排队——不同会话的并行度由 05 runtime 的全局执行槽控制。
 
 ### conversation_ref（不透明寻址令牌）
@@ -61,8 +61,8 @@ interface RunRecord {
 | kind | 处理 |
 |---|---|
 | `result` | run → done；解码 conversation_ref → sender.send_result |
-| `error` | run → failed；→ sender.send_text（「分析失败：…」） |
-| `progress` | 节流外发文本（≥30s 间隔，「分析中：…」）。回执为**状态指示器 reaction**（用户定，2026-06-12）：开跑在源消息贴 💪 MUSCLE（=工作中），**终态回复发出前先撤掉**（deliverAfterClearingReceipt，撤失败不挡回复）；渠道无 reaction 能力时降级文本回执。正文/系统文案禁用 [表情] 短代码（实测不渲染）。M1 进度卡片原地更新替代 |
+| `error` | run → failed；→ sender.send_text（「分析失败：…」），reason 经 `friendlyError` 翻成业务同学看得懂的话（超时/未产出/执行异常映射为人话，其余原样透传；原始 reason 仍在 events.ndjson）。不糖衣坏消息，只是去工程腔 |
+| `progress` | **原地更新**（支持 `send_progress`/`update_progress` 的渠道，如飞书）：首条进度发一条新消息记下 message_id 句柄，其后 `update_progress` 原地改同一条（≥5s 间隔，仅防 API 频控），长任务只占一条气泡不刷屏；不支持的渠道降级逐条追加（≥30s 间隔防刷屏）。回执为**状态指示器 reaction**（用户定，2026-06-12）：开跑在源消息贴 💪 MUSCLE（=工作中），**终态回复发出前先撤掉**（deliverAfterClearingReceipt，撤失败不挡回复）；渠道无 reaction 能力时降级文本回执。回执是 reaction（非气泡），故首条进度可立即外发。正文/系统文案禁用 [表情] 短代码（实测不渲染） |
 | `ask` / `signal` | M0 不应出现；出现即 warn 日志 + 该 run 按 error 收尾 |
 
 ## 关键流程

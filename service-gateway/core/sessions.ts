@@ -12,16 +12,21 @@ export interface RunRecord {
   created_at: string;
   lastProgressSentAt: number; // 进度外发节流（ms epoch）
   receiptHandle: Promise<string | null> | null; // 「工作中」reaction 句柄（回复前撤掉）
+  progressHandle: Promise<string | null> | null; // 进度消息句柄：首条发出后原地更新，长任务只占一条气泡
 }
 
-/** 进度文本外发的最小间隔（用户要求执行过程可见，2026-06-12；M1 卡片替代） */
-const PROGRESS_INTERVAL_MS = 30_000;
+// 进度外发节流：原地更新不刷屏，间隔只需防 API 频控，可以勤一点；
+// 降级到逐条追加的渠道则拉长到 30s，避免一长串「分析中…」气泡淹没答案。
+const PROGRESS_UPDATE_INTERVAL_MS = 5_000;
+const PROGRESS_APPEND_INTERVAL_MS = 30_000;
 
 // 回执用飞书 reaction 做状态指示器（用户定，2026-06-12）：
 // 贴 💪 = 正在工作中；回复发出前撤掉。文本短代码实测不渲染已弃用。
 // 测试用这些常量过滤非业务回复，改文案时保持前缀可识别。
 export const RECEIPT_REACTION = "Typing"; // 敲键盘 = 工作中（用户定；key 大小写敏感，"TYPING" 无效）
 export const RECEIPT_TEXT = "收到，正在分析…（通常需要几分钟）"; // 渠道不支持 reaction 时的降级
+export const RECEIPT_QUEUED_TEXT = "收到，前面还有问题在处理，轮到它会接着答。"; // 排队回执的文本降级
+export const OVERFLOW_TEXT = "最近问题有点多，这条暂时没接住，方便的话稍后再发一次。"; // pending 溢出提示
 export const PROGRESS_PREFIX = "分析中：";
 
 export interface SessionsOpts {
@@ -30,7 +35,9 @@ export interface SessionsOpts {
   pendingLimit: number;
   terminalKeep: number; // 终态记录 LRU 容量
   submit: (task: Task) => void;
-  sender: ConnectorPort;
+  sender: ConnectorPort; // 默认出口（飞书）
+  senderByChannel?: Record<string, ConnectorPort>; // 按渠道覆盖（如 console → 文件系统直读，no-op 出口）
+  progressIntervalMs?: number; // 测试用：覆盖进度节流间隔（生产留空，按渠道能力取上面两个常量）
   log: Logger;
 }
 
@@ -43,10 +50,43 @@ export class Sessions {
   private runs = new Map<string, RunRecord>();
   private activeByConv = new Map<string, string>(); // convKey → run_id
   private runConv = new Map<string, string>(); // run_id → convKey
-  private pending = new Map<string, Envelope[]>();
+  // 排队项带上回执句柄：排队时已贴的「工作中」reaction 在真正开跑时沿用，不重复贴
+  private pending = new Map<string, { env: Envelope; receipt: Promise<string | null> | null }[]>();
+  private overflowed = new Set<string>(); // 已就溢出提示过的会话（成功入队后重置，每轮只提示一次）
   private terminalOrder: string[] = [];
 
   constructor(private opts: SessionsOpts) {}
+
+  /** 按渠道挑出口；无覆盖则用默认 sender。 */
+  private senderForChannel(channel: string): ConnectorPort {
+    return this.opts.senderByChannel?.[channel] ?? this.opts.sender;
+  }
+
+  private senderFor(rec: RunRecord): ConnectorPort {
+    return this.senderForChannel(rec.channel);
+  }
+
+  /**
+   * 回执：源消息贴「工作中」reaction，返回可撤句柄；渠道不支持 reaction 时降级文本回执，返回 null。
+   * queued=true 用排队文案（仅文本降级时区分；reaction 两种情况都贴 Typing，含义都是「收到，在处理」）。
+   */
+  private establishReceipt(channel: string, conversation: Conversation, queued: boolean): Promise<string | null> | null {
+    const sender = this.senderForChannel(channel);
+    const fallbackText = queued ? RECEIPT_QUEUED_TEXT : RECEIPT_TEXT;
+    if (sender.react && conversation.source_message_id) {
+      return sender.react(conversation, RECEIPT_REACTION).catch((err) => {
+        this.opts.log("warn", "sessions", "receipt reaction failed, falling back to text", {
+          error: String(err).slice(0, 200),
+        });
+        void sender.sendText(conversation, fallbackText).catch(() => {});
+        return null;
+      });
+    }
+    void sender.sendText(conversation, fallbackText).catch((err) =>
+      this.opts.log("error", "sessions", "receipt text failed", { error: String(err).slice(0, 200) }),
+    );
+    return null;
+  }
 
   runStatus(runId: string): RunRecord | undefined {
     return this.runs.get(runId);
@@ -69,9 +109,17 @@ export class Sessions {
       const q = this.pending.get(key) ?? [];
       if (q.length >= this.opts.pendingLimit) {
         log("error", "sessions", "pending limit reached, message dropped", { conv: key, limit: this.opts.pendingLimit });
+        if (!this.overflowed.has(key)) {
+          // 别让丢弃静默无声：每轮溢出提示一次（成功入队后复位），免得用户连发时被刷屏
+          this.overflowed.add(key);
+          void this.senderForChannel(env.channel).sendText(env.conversation, OVERFLOW_TEXT).catch(() => {});
+        }
         return;
       }
-      q.push(env);
+      this.overflowed.delete(key);
+      // 排队也回执：贴「工作中」reaction，别让用户以为追问被无视；句柄随排队项带到开跑时沿用
+      const receipt = this.establishReceipt(env.channel, env.conversation, true);
+      q.push({ env, receipt });
       this.pending.set(key, q);
       log("info", "sessions", "queued behind running run", { conv: key, depth: q.length });
       return;
@@ -89,10 +137,35 @@ export class Sessions {
     switch (ev.kind) {
       case "progress": {
         // 节流外发执行进度（runtime 已落 events.ndjson，这里只管用户可见性）
+        const sender = this.senderFor(rec);
+        const canUpdate = !!(sender.sendProgress && sender.updateProgress);
+        const interval = this.opts.progressIntervalMs ?? (canUpdate ? PROGRESS_UPDATE_INTERVAL_MS : PROGRESS_APPEND_INTERVAL_MS);
         const now = Date.now();
-        if (now - rec.lastProgressSentAt >= PROGRESS_INTERVAL_MS) {
-          rec.lastProgressSentAt = now;
-          this.deliver(rec, (s) => s.sendText(rec.conversation, `${PROGRESS_PREFIX}${ev.status.slice(0, 120)}`));
+        if (now - rec.lastProgressSentAt < interval) return;
+        rec.lastProgressSentAt = now;
+        const text = `${PROGRESS_PREFIX}${ev.status.slice(0, 120)}`;
+        if (!canUpdate) {
+          // 渠道不支持原地更新 → 降级逐条追加（30s 间隔防刷屏）
+          this.deliver(rec, (s) => s.sendText(rec.conversation, text));
+        } else if (rec.progressHandle === null) {
+          // 首条进度：发新消息并记下句柄（立即占位，防节流窗口内重复发新气泡）；失败则复位待重试
+          rec.progressHandle = sender.sendProgress!(rec.conversation, rec.run_id, text).catch((err) => {
+            this.opts.log("warn", "sessions", "progress send failed", { run_id: rec.run_id, error: String(err).slice(0, 200) });
+            rec.progressHandle = null;
+            return null;
+          });
+        } else {
+          // 后续进度：原地更新同一条消息，不新增气泡
+          void (async () => {
+            const handle = await rec.progressHandle!.catch(() => null);
+            if (!handle) return;
+            await sender.updateProgress!(rec.conversation, handle, text).catch((err) =>
+              this.opts.log("warn", "sessions", "progress update failed (next refresh retries)", {
+                run_id: rec.run_id,
+                error: String(err).slice(0, 200),
+              }),
+            );
+          })();
         }
         return;
       }
@@ -102,7 +175,7 @@ export class Sessions {
         return;
       case "error":
         this.finish(rec, "failed");
-        this.deliverAfterClearingReceipt(rec, (s) => s.sendText(rec.conversation, `分析失败：${ev.reason}`));
+        this.deliverAfterClearingReceipt(rec, (s) => s.sendText(rec.conversation, `分析失败：${friendlyError(ev.reason)}`));
         return;
       case "ask":
       case "signal":
@@ -121,7 +194,7 @@ export class Sessions {
     return this.activeByConv.size;
   }
 
-  private startRun(key: string, env: Envelope): void {
+  private startRun(key: string, env: Envelope, existingReceipt?: Promise<string | null> | null): void {
     const runId = newRunId();
     const task: Task = {
       v: 1,
@@ -143,27 +216,16 @@ export class Sessions {
       conversation: env.conversation,
       status: "running",
       created_at: new Date().toISOString(),
-      lastProgressSentAt: Date.now(), // 回执已发，首条进度 30s 后再说
+      lastProgressSentAt: 0, // 回执是 reaction（非气泡），首条进度可立即发，不必再等一个节流窗口
       receiptHandle: null,
+      progressHandle: null,
     };
     this.runs.set(runId, rec);
     this.activeByConv.set(key, runId);
     this.runConv.set(runId, key);
     this.opts.log("info", "sessions", "run started", { run_id: runId, conv: key });
-    // 回执：贴「工作中」reaction（💪）在源消息上；渠道不支持或失败 → 降级文本
-    const sender = this.opts.sender;
-    if (sender.react && rec.conversation.source_message_id) {
-      rec.receiptHandle = sender.react(rec.conversation, RECEIPT_REACTION).catch((err) => {
-        this.opts.log("warn", "sessions", "receipt reaction failed, falling back to text", {
-          run_id: runId,
-          error: String(err).slice(0, 200),
-        });
-        this.deliver(rec, (s) => s.sendText(rec.conversation, RECEIPT_TEXT));
-        return null;
-      });
-    } else {
-      this.deliver(rec, (s) => s.sendText(rec.conversation, RECEIPT_TEXT));
-    }
+    // 回执：排队期已贴过 reaction 的沿用同一句柄（不重复贴）；否则现贴「工作中」reaction（💪）
+    rec.receiptHandle = existingReceipt !== undefined ? existingReceipt : this.establishReceipt(env.channel, env.conversation, false);
     this.opts.submit(task);
   }
 
@@ -178,12 +240,12 @@ export class Sessions {
     const q = this.pending.get(key);
     const next = q?.shift();
     if (q && q.length === 0) this.pending.delete(key);
-    if (next) this.startRun(key, next);
+    if (next) this.startRun(key, next.env, next.receipt);
   }
 
   private deliver(rec: RunRecord, send: (s: ConnectorPort) => Promise<void>): void {
     // 发送失败不改变 run 状态（02 已定）：记日志放弃
-    void send(this.opts.sender).catch((err) =>
+    void send(this.senderFor(rec)).catch((err) =>
       this.opts.log("error", "sessions", "delivery failed (run state unchanged)", {
         run_id: rec.run_id,
         error: String(err),
@@ -194,7 +256,7 @@ export class Sessions {
   /** 终态回复：先撤掉「工作中」reaction（用户定的顺序），再发回复。撤失败不挡回复。 */
   private deliverAfterClearingReceipt(rec: RunRecord, send: (s: ConnectorPort) => Promise<void>): void {
     void (async () => {
-      const sender = this.opts.sender;
+      const sender = this.senderFor(rec);
       if (rec.receiptHandle && sender.unreact) {
         const handle = await rec.receiptHandle.catch(() => null);
         if (handle) {
@@ -226,6 +288,17 @@ export class Sessions {
   private convKey(env: Envelope): string {
     return `${env.channel}:${env.conversation.id}:${env.conversation.thread_id ?? ""}`;
   }
+}
+
+/**
+ * 系统级失败原因 → 给业务同学看的人话（原始 reason 仍在 events.ndjson / 日志里供排查）。
+ * 不糖衣坏消息，只是把「agent 未产出回复内容」「执行超时（600s）」这类工程腔翻成能看懂的话。
+ */
+function friendlyError(reason: string): string {
+  if (/超时/.test(reason)) return "这次没能在限定时间内查完。把问题问得更具体些（比如限定某一天、单个指标）再试一次，通常会快很多。";
+  if (/未产出/.test(reason)) return "这次没能得出结果，麻烦换个问法或稍后再试一次。";
+  if (/能力执行异常|违约|运行目录创建失败/.test(reason)) return "分析过程中出了点状况，没能完成，请稍后重试。";
+  return reason; // 其余（如能力自己报的具体原因）已是给人看的话，原样透传
 }
 
 function newRunId(): string {

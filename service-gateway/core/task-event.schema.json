@@ -16,7 +16,8 @@
     {
       "properties": {
         "kind": { "const": "progress" },
-        "status": { "type": "string" }
+        "status": { "type": "string" },
+        "detail": { "type": "string" }
       },
       "required": ["status"]
     },

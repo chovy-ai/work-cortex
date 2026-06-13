@@ -295,6 +295,6 @@ service-gateway/                   # 独立 TS 包（Node ≥ 20，package.json 
 | 里程碑 | 内容 | 依赖 |
 |---|---|---|
 | **M0 直通车** | lark 私聊问答 → data-analysis dashboard path（无 gate），文本回复；gateway 只含必要四件；三个契约 schema 落全，验证三层端到端 | 不依赖 P3 |
-| **M1 完整问数** | gate 挂起恢复 + raw_analysis 确认卡片 + thread 追问 + 进度卡片更新 + 身份白名单 | P3 StepScheduler |
+| **M1 完整问数** | gate 挂起恢复 + raw_analysis 确认卡片 + thread 追问 + 进度卡片更新（M0 已先以文本消息原地更新落地）+ 身份白名单 | P3 StepScheduler |
 | **M2 主动性** | 订阅日报（cron → Task）、知识更新定时调度、signal 推维护者群 | M1、④ 域 |
 | **M3 规模化** | 异动告警、权限细化、成本看板、迁服务器、第二连接器或第二能力接入验证扩展性 | M2 |

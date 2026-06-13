@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { Sessions, RECEIPT_TEXT, PROGRESS_PREFIX, RECEIPT_REACTION } from "../core/sessions.js";
+import { Sessions, RECEIPT_TEXT, RECEIPT_QUEUED_TEXT, OVERFLOW_TEXT, PROGRESS_PREFIX, RECEIPT_REACTION } from "../core/sessions.js";
 import { silentLogger } from "../core/log.js";
 import type { ConnectorPort, Conversation, Envelope, Task, TaskEvent } from "../core/contracts.js";
 
@@ -46,7 +46,14 @@ function harness(pendingLimit = 10) {
   const errorEvent = (runId: string, reason = "炸了"): TaskEvent => ({
     v: 1, run_id: runId, seq: 1, at: new Date().toISOString(), kind: "error", reason,
   });
-  const replies = () => sent.filter((m) => !m.body.startsWith(RECEIPT_TEXT) && !m.body.startsWith(PROGRESS_PREFIX));
+  const replies = () =>
+    sent.filter(
+      (m) =>
+        !m.body.startsWith(RECEIPT_TEXT) &&
+        !m.body.startsWith(RECEIPT_QUEUED_TEXT) &&
+        !m.body.startsWith(OVERFLOW_TEXT) &&
+        !m.body.startsWith(PROGRESS_PREFIX),
+    );
   return { sessions, submitted, sent, replies, resultEvent, errorEvent };
 }
 
@@ -174,4 +181,86 @@ test("unexpected ask in M0 fails the run", async () => {
   assert.equal(h.replies().length, 1);
   assert.equal(h.replies()[0].kind, "text");
   assert.match(h.replies()[0].body, /不支持/);
+});
+
+test("progress on update-capable channel: first sends a new message, rest update it in place (no spam)", async () => {
+  const calls: { op: string; arg: string }[] = [];
+  const submitted: Task[] = [];
+  const sender = {
+    async sendText() {},
+    async sendResult() {},
+    async sendProgress(_c: Conversation, _r: string, status: string) {
+      calls.push({ op: "send", arg: status });
+      return "om_progress";
+    },
+    async updateProgress(_c: Conversation, handle: string, status: string) {
+      calls.push({ op: `update:${handle}`, arg: status });
+    },
+  };
+  const s = new Sessions({
+    capabilityId: "data-analysis", timeoutSec: 600, pendingLimit: 10, terminalKeep: 512,
+    submit: (t) => submitted.push(t), sender, progressIntervalMs: 0, log: silentLogger,
+  });
+  s.handleEnvelope(env("p1"));
+  const runId = submitted[0].run_id;
+  const prog = (n: number, status: string): TaskEvent => ({ v: 1, run_id: runId, seq: n, at: new Date().toISOString(), kind: "progress", status });
+  s.handleEvent(prog(1, "解析口径"));
+  await tick();
+  s.handleEvent(prog(2, "执行查询"));
+  await tick();
+  s.handleEvent(prog(3, "汇总结论"));
+  await tick();
+  // 仅一条 send（首条），其余原地 update：长任务进度不再每条新增气泡
+  assert.equal(calls.filter((c) => c.op === "send").length, 1);
+  assert.equal(calls.filter((c) => c.op === "update:om_progress").length, 2);
+  assert.equal(calls[0].arg, `${PROGRESS_PREFIX}解析口径`);
+  assert.equal(calls[2].arg, `${PROGRESS_PREFIX}汇总结论`);
+});
+
+test("queued follow-up is acknowledged (reaction), not silently swallowed", async () => {
+  const reacted: string[] = [];
+  const submitted: Task[] = [];
+  const sender = {
+    async sendText() {},
+    async sendResult() {},
+    async react(c: Conversation, emoji: string) {
+      reacted.push(`${c.source_message_id}:${emoji}`);
+      return `rid_${c.source_message_id}`;
+    },
+    async unreact() {},
+  };
+  const s = new Sessions({
+    capabilityId: "data-analysis", timeoutSec: 600, pendingLimit: 10, terminalKeep: 512,
+    submit: (t) => submitted.push(t), sender, log: silentLogger,
+  });
+  s.handleEnvelope(env("q1")); // 开跑 → 贴 reaction
+  s.handleEnvelope(env("q2")); // 排队 → 也贴 reaction（acknowledged）
+  await tick();
+  assert.deepEqual(reacted, [`om_q1:${RECEIPT_REACTION}`, `om_q2:${RECEIPT_REACTION}`]);
+  // 排队项开跑时沿用排队期的句柄，不重复贴
+  s.handleEvent({ v: 1, run_id: submitted[0].run_id, seq: 1, at: new Date().toISOString(), kind: "result", summary: "答案", tables: [], charts: [] });
+  await tick();
+  assert.equal(reacted.filter((r) => r.startsWith("om_q2")).length, 1);
+});
+
+test("pending overflow notifies the user once per episode", async () => {
+  const h = harness(2);
+  h.sessions.handleEnvelope(env("e1")); // 开跑
+  h.sessions.handleEnvelope(env("e2")); // 队列 [e2]
+  h.sessions.handleEnvelope(env("e3")); // 队列 [e2,e3]
+  h.sessions.handleEnvelope(env("e4")); // 溢出 → 提示
+  h.sessions.handleEnvelope(env("e5")); // 再溢出 → 不重复提示
+  const overflowMsgs = h.sent.filter((m) => m.body.startsWith(OVERFLOW_TEXT));
+  assert.equal(overflowMsgs.length, 1);
+});
+
+test("error reason is humanized for business users", async () => {
+  const h = harness();
+  h.sessions.handleEnvelope(env("e1"));
+  h.sessions.handleEvent(h.errorEvent(h.submitted[0].run_id, "执行超时（600s）"));
+  await tick();
+  const reply = h.replies()[0];
+  assert.equal(reply.kind, "text");
+  assert.match(reply.body, /分析失败/);
+  assert.doesNotMatch(reply.body, /600s|超时（/); // 工程腔不暴露给用户
 });

@@ -75,7 +75,13 @@ export function createAcpRunner(opts: AcpRunnerOpts): RunnerFn {
             segmentText = ""; // 工具调用开始 → 之前的文本是旁白，重开一段
             const { title, kind } = u as { title?: string; kind?: string | null };
             log("debug", "runner.acp", "tool call", { run_id: task.run_id, title: (title ?? "").slice(0, 200) });
-            emit({ kind: "progress", status: narration ?? describeToolKind(kind) });
+            // status 给 IM（叙述，不暴露命令/路径）；detail 留原始 title 给控制台看原始内容
+            const raw = title?.trim();
+            emit({
+              kind: "progress",
+              status: narration ?? describeToolKind(kind),
+              ...(raw ? { detail: raw } : {}),
+            });
           }
           // plan / available_commands_update / current_mode_update 等其余更新：忽略
         } catch (err) {

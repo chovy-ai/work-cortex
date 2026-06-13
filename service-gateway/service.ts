@@ -9,6 +9,8 @@ import { Sessions } from "./core/sessions.js";
 import { Runtime } from "./core/runtime.js";
 import { startLarkListener } from "./connectors/lark/listener.js";
 import { LarkSender } from "./connectors/lark/sender.js";
+import { ConsoleSender } from "./connectors/console/sender.js";
+import { startConsoleHttp, type ConsoleHttpHandle } from "./connectors/console/http.js";
 import { createAcpRunner } from "./capabilities/data-analysis/runner.js";
 
 const execFileP = promisify(execFile);
@@ -23,6 +25,7 @@ interface Config {
   sessions: { pendingPerConversation: number; terminalKeep: number };
   capability: { id: string; runtime: { agent: string; cmd: string; args: string[] } };
   lark: { bin: string; subscribeArgs: string[] };
+  console: { enabled: boolean; host: string; port: number };
   log: { level: LogLevel };
 }
 
@@ -33,6 +36,8 @@ const DEFAULTS: Config = {
   // cmd 含 "/" 时按相对 sgRoot 解析；默认用本地安装的官方适配器（npx 会误拉 registry 上的同名废弃包）
   capability: { id: "data-analysis", runtime: { agent: "claude-code", cmd: "node_modules/.bin/claude-code-acp", args: [] } },
   lark: { bin: "lark-cli", subscribeArgs: ["event", "+subscribe", "--as", "bot", "--event-types", "im.message.receive_v1", "--quiet"] },
+  // 控制台入站：本机回环 HTTP，供 gateway-console GUI 直接提交查询（结果走文件系统呈现）
+  console: { enabled: true, host: "127.0.0.1", port: 8765 },
   log: { level: "info" },
 };
 
@@ -46,11 +51,14 @@ function loadConfig(): Config {
     sessions: { ...DEFAULTS.sessions, ...user.sessions },
     capability: { ...DEFAULTS.capability, ...user.capability },
     lark: { ...DEFAULTS.lark, ...user.lark },
+    console: { ...DEFAULTS.console, ...user.console },
     log: { ...DEFAULTS.log, ...user.log },
   };
   // 环境变量单项覆盖
   if (process.env.SG_MAX_CONCURRENT) cfg.runtime.maxConcurrent = Number(process.env.SG_MAX_CONCURRENT);
   if (process.env.SG_TIMEOUT_S) cfg.runtime.timeoutSec = Number(process.env.SG_TIMEOUT_S);
+  if (process.env.SG_CONSOLE_PORT) cfg.console.port = Number(process.env.SG_CONSOLE_PORT);
+  if (process.env.SG_CONSOLE_ENABLED) cfg.console.enabled = process.env.SG_CONSOLE_ENABLED !== "0";
   if (process.env.SG_LOG_LEVEL) cfg.log.level = process.env.SG_LOG_LEVEL as LogLevel;
   return cfg;
 }
@@ -117,6 +125,7 @@ async function main(): Promise<void> {
   // 组装（依赖序）：queue → sender → runtime → sessions，回流经闭包后绑定
   const queue = new EnvelopeQueue(cfg.queue, log);
   const sender = new LarkSender({ bin: cfg.lark.bin, log });
+  const consoleSender = new ConsoleSender(log);
   const rtCmd = cfg.capability.runtime.cmd.includes("/")
     ? resolve(sgRoot, cfg.capability.runtime.cmd)
     : cfg.capability.runtime.cmd;
@@ -142,6 +151,7 @@ async function main(): Promise<void> {
     terminalKeep: cfg.sessions.terminalKeep,
     submit: (t) => runtime.submit(t),
     sender,
+    senderByChannel: { console: consoleSender },
     log,
   });
 
@@ -151,6 +161,18 @@ async function main(): Promise<void> {
     onEnvelope: (env) => queue.push(env),
     log,
   });
+
+  // 控制台入站：本机回环 HTTP，GUI 提交查询入同一队列（结果走文件系统回显）
+  let consoleHttp: ConsoleHttpHandle | null = null;
+  if (cfg.console.enabled) {
+    consoleHttp = startConsoleHttp({
+      host: cfg.console.host,
+      port: cfg.console.port,
+      push: (env) => queue.push(env),
+      status: () => ({ queue: queue.size, running: sessions.runningCount }),
+      log,
+    });
+  }
 
   // 退出序：停 listener → 排空 queue → 等 running ≤30s → abort → exit
   let shuttingDown = false;
@@ -162,7 +184,7 @@ async function main(): Promise<void> {
     }
     shuttingDown = true;
     log("info", "service", `${sig} received, graceful shutdown`);
-    await listener.stop();
+    await Promise.all([listener.stop(), consoleHttp?.stop() ?? Promise.resolve()]);
     queue.stop();
   };
   process.on("SIGTERM", () => void shutdown("SIGTERM"));

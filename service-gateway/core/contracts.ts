@@ -60,7 +60,8 @@ export interface ResultChart {
 
 // R2：runner 只 emit draft（kind + 载荷），簿记字段由 runtime 单一写者补全
 export type TaskEventDraft =
-  | { kind: "progress"; status: string }
+  // status：给 IM 看的叙述；detail（可选）：原始工具调用 title，给控制台看原始内容
+  | { kind: "progress"; status: string; detail?: string }
   | { kind: "ask"; prompt: string; options: string[] }
   | { kind: "result"; summary: string; tables: ResultTable[]; charts: ResultChart[]; artifacts_dir?: string }
   | { kind: "error"; reason: string; retriable?: boolean }
@@ -74,10 +75,14 @@ export type RunnerFn = (
   signal: AbortSignal,
 ) => Promise<void>;
 
-// ConnectorPort 的 M0 子集（send_progress / update_progress / ask 归 M1）
+// ConnectorPort（ask 仍归 M1；send_progress / update_progress 已落地，长任务进度原地更新）
 export interface ConnectorPort {
   sendText(conversation: Conversation, text: string): Promise<void>;
   sendResult(conversation: Conversation, runId: string, summaryMarkdown: string): Promise<void>;
+  /** 可选：发送一条「可原地更新」的进度消息，返回消息句柄（如飞书 message_id）。不支持的渠道不实现，core 自动降级为逐条 sendText。 */
+  sendProgress?(conversation: Conversation, runId: string, status: string): Promise<string | null>;
+  /** 可选：原地更新 sendProgress 返回句柄对应的进度消息——长任务只占一条气泡，不刷屏。 */
+  updateProgress?(conversation: Conversation, handle: string, status: string): Promise<void>;
   /** 可选：对源消息贴表情回应（飞书 reaction），返回可撤销句柄。不支持的渠道不实现，core 自动降级为文本。 */
   react?(conversation: Conversation, emojiType: string): Promise<string | null>;
   /** 可选：撤掉之前贴的表情回应（handle 来自 react 返回值）。 */

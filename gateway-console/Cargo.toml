@@ -1,0 +1,16 @@
+[package]
+name = "gateway-console"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+chrono = { version = "0.4.45", default-features = false, features = ["clock"] }
+eframe = "0.29"
+egui = "0.29"
+egui_commonmark = "0.18"
+# 图片资源预览：file:// 字节加载器 + 图片解码器；syntect 提供代码/JSON 语法高亮。
+egui_extras = { version = "0.29", features = ["file", "image", "syntect"] }
+# 让 image crate 支持常见图表格式的解码（png 已由 eframe 间接开启）。
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "gif", "bmp", "webp"] }
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.150"
