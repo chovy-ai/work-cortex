@@ -1,0 +1,22 @@
+{
+  "generated_at": "1970-01-01T00:00:00.000Z",
+  "nextop_commit": "unknown",
+  "nextop_path": "",
+  "defaults": {},
+  "default_metric_policy": {
+    "dau": {
+      "identity": "device_id",
+      "aggregation": "count(distinct device_id)",
+      "time_bucket": "local day",
+      "event_time_preference": "client_ts / local_time_ms"
+    }
+  },
+  "nextopd_common_params": [],
+  "renderer_stripped_params": [],
+  "tracking_doc": {
+    "path": "docs/architecture/analytics-tracking.md",
+    "exists": false,
+    "summary": ""
+  },
+  "sources": {}
+}
