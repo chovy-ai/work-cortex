@@ -3,13 +3,16 @@
     "target": "ES2022",
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
+    "outDir": "build",
+    "rootDir": ".",
     "strict": true,
-    "esModuleInterop": true,
     "resolveJsonModule": true,
-    "allowImportingTsExtensions": true,
+    "esModuleInterop": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
-    "types": ["node"]
+    "declaration": false,
+    "sourceMap": false
   },
-  "include": ["domains/**/*.ts", "tests/**/*.ts", "vitest.config.ts"]
+  "include": ["domains/**/*.ts", "tests/**/*.ts"],
+  "exclude": ["node_modules", "build", "service-gateway", "outputs"]
 }

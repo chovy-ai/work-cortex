@@ -1,18 +1,21 @@
 {
-  "name": "data-analysis",
+  "name": "data-analysis-tools",
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "engines": { "node": ">=20" },
   "scripts": {
-    "typecheck": "tsc --noEmit",
-    "test": "vitest run",
-    "datafinder": "tsx domains/datafinder-interface/cli.ts",
-    "knowledge": "tsx domains/knowledge-update/update_knowledge.ts"
+    "build:tools": "tsc -p tsconfig.tools.json",
+    "test:tools": "npm run build:tools && node --test 'build/tests/*.test.js'"
+  },
+  "dependencies": {
+    "kafkajs": "^2.2.4"
+  },
+  "optionalDependencies": {
+    "duckdb": "^1.1.0"
   },
   "devDependencies": {
-    "@types/node": "^20.14.15",
-    "tsx": "^4.19.2",
-    "typescript": "^5.5.4",
-    "vitest": "^4.1.8"
+    "@types/node": "^20.14.0",
+    "typescript": "^5.5.0"
   }
 }

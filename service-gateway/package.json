@@ -1,0 +1,24 @@
+{
+  "name": "service-gateway",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "gen:types": "json2ts -i 'core/*.schema.json' -o core/generated/ --cwd core",
+    "test": "npm run build && node --test 'dist/test/*.test.js'",
+    "start": "npm run build && node dist/service.js"
+  },
+  "dependencies": {
+    "@zed-industries/agent-client-protocol": "^0.4.5",
+    "@zed-industries/claude-code-acp": "^0.16.2",
+    "ajv": "^8.17.1",
+    "ajv-formats": "^3.0.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "json-schema-to-typescript": "^15.0.0",
+    "typescript": "^5.5.0"
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "id": "lark",
+  "listen": {
+    "type": "subprocess",
+    "bin": "lark-cli",
+    "args": [
+      "event",
+      "+subscribe",
+      "--as",
+      "bot",
+      "--event-types",
+      "im.message.receive_v1",
+      "--quiet"
+    ]
+  },
+  "capabilities": {
+    "thread": true,
+    "message_update": true,
+    "actions": true,
+    "format": "lark_card"
+  }
+}

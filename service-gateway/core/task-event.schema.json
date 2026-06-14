@@ -1,0 +1,82 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "task-event.schema.json",
+  "title": "TaskEvent",
+  "description": "接缝二回流契约：能力 runner 的流式事件（簿记字段由 runtime 补全，R2）",
+  "type": "object",
+  "required": ["v", "run_id", "seq", "at", "kind"],
+  "properties": {
+    "v": { "const": 1 },
+    "run_id": { "type": "string", "minLength": 1 },
+    "seq": { "type": "integer", "minimum": 0 },
+    "at": { "type": "string", "format": "date-time" },
+    "kind": { "enum": ["progress", "ask", "result", "error", "signal"] }
+  },
+  "oneOf": [
+    {
+      "properties": {
+        "kind": { "const": "progress" },
+        "status": { "type": "string" },
+        "detail": { "type": "string" }
+      },
+      "required": ["status"]
+    },
+    {
+      "properties": {
+        "kind": { "const": "ask" },
+        "prompt": { "type": "string" },
+        "options": { "type": "array", "items": { "type": "string" }, "minItems": 1 }
+      },
+      "required": ["prompt", "options"]
+    },
+    {
+      "properties": {
+        "kind": { "const": "result" },
+        "summary": { "type": "string" },
+        "tables": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["columns", "rows"],
+            "properties": {
+              "title": { "type": "string" },
+              "columns": { "type": "array", "items": { "type": "string" } },
+              "rows": { "type": "array", "items": { "type": "array", "items": { "type": ["string", "number", "null"] } } }
+            }
+          }
+        },
+        "charts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["image_path"],
+            "properties": {
+              "title": { "type": "string" },
+              "image_path": { "type": "string" }
+            }
+          }
+        },
+        "artifacts_dir": { "type": "string" }
+      },
+      "required": ["summary", "tables", "charts"]
+    },
+    {
+      "properties": {
+        "kind": { "const": "error" },
+        "reason": { "type": "string" },
+        "retriable": { "type": "boolean" }
+      },
+      "required": ["reason"]
+    },
+    {
+      "properties": {
+        "kind": { "const": "signal" },
+        "type": { "type": "string" },
+        "detail": { "type": "object" }
+      },
+      "required": ["type"]
+    }
+  ]
+}

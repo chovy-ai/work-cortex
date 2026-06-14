@@ -1,0 +1,17 @@
+{
+  "id": "data-analysis",
+  "description": "nextop 产品数据 / 日志分析（本仓库查询链路）",
+  "match": {
+    "default": true
+  },
+  "runtime": {
+    "type": "acp",
+    "agent": "claude-code",
+    "cmd": "node_modules/.bin/claude-code-acp",
+    "args": []
+  },
+  "permissions": {
+    "dashboard": "all",
+    "raw_analysis": "allowlist"
+  }
+}

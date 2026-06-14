@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "task.schema.json",
+  "title": "Task",
+  "description": "接缝二下发契约：gateway 把一次执行任务交给能力 runner",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["v", "run_id", "capability", "input", "context", "resume", "limits"],
+  "properties": {
+    "v": { "const": 1 },
+    "run_id": { "type": "string", "minLength": 1 },
+    "capability": { "type": "string", "minLength": 1 },
+    "input": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["text"],
+      "properties": {
+        "text": { "type": "string" },
+        "attachments": { "type": "array", "items": { "type": "object" } }
+      }
+    },
+    "context": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["principal", "conversation_ref", "history"],
+      "properties": {
+        "principal": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["member"],
+          "properties": {
+            "member": { "type": "string" },
+            "roles": { "type": "array", "items": { "type": "string" } }
+          }
+        },
+        "conversation_ref": { "type": "string", "minLength": 1, "description": "core 可解码、能力不可解读，原样带回" },
+        "history": { "type": "array", "items": { "type": "object" }, "description": "M0 恒空，M1 定策略" }
+      }
+    },
+    "resume": {
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["action_id"],
+          "properties": {
+            "action_id": { "enum": ["confirm", "revise", "cancel"] },
+            "params": { "type": "object" }
+          }
+        }
+      ],
+      "description": "M0 恒 null，M1 gate 恢复时携带"
+    },
+    "limits": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["timeout_s"],
+      "properties": {
+        "timeout_s": { "type": "integer", "minimum": 1 }
+      }
+    }
+  }
+}

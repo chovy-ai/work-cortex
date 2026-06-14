@@ -17,46 +17,47 @@ It bundles three things in one place:
 | File | Role |
 | --- | --- |
 | `manifest.json` | Canonical interface definitions + doc URLs. Source of truth. |
-| `client.ts` | `DataFinderClient` (signing, generic `call()`, typed wrappers), `loadConfigFromEnv`. |
-| `cli.ts` | `npm run datafinder -- list / describe / call` for discovery and ad-hoc calls. |
+| `client.ts` | `DataFinderClient` (signing, generic `call()`, typed wrappers), `load_config_from_env`. |
+| `cli.ts` | `node build/domains/datafinder-interface/cli.js list / describe / call` for discovery and ad-hoc calls. |
 | `UPDATE.md` | How the agent extends/verifies the manifest from the latest docs. |
+| `__init__.py` | Public exports. |
 
 ## Discover the interface
 
 ```
-npm run datafinder -- list                 # every endpoint + summary
-npm run datafinder -- describe analysis.query
+node build/domains/datafinder-interface/cli.js list                 # every endpoint + summary
+node build/domains/datafinder-interface/cli.js describe analysis.query
 ```
 
-From TypeScript:
+From Python:
 
-```ts
-import { DataFinderClient, loadConfigFromEnv } from "./client.ts";
+```python
+from datafinder import DataFinderClient, load_config_from_env
 
-const client = new DataFinderClient(loadConfigFromEnv());
-client.listEndpoints();          // [{id, summary, doc_url, path_verified}, ...]
-client.describe("report.query"); // full interface spec
-client.docUrl("report.query");   // official doc link
+client = DataFinderClient(load_config_from_env())
+client.list_endpoints()          # [{id, summary, doc_url, path_verified}, ...]
+client.describe("report.query")  # full interface spec
+client.doc_url("report.query")   # official doc link
 ```
 
 ## Call an endpoint
 
 Typed wrapper (preferred for the common ones):
 
-```ts
-const result = await client.queryReport("123");
+```python
+result = client.query_report(report_id="123", start_date="2026-06-01", end_date="2026-06-07")
 ```
 
 Generic, manifest-validated (works for every endpoint, including ones with no wrapper):
 
-```ts
-const result = await client.call("report.query", {
-  report_id: "123",
-  period: { start_time: "2026-06-01", end_time: "2026-06-07" }
-});
+```python
+result = client.call("report.query", {
+    "report_id": "123",
+    "period": {"start_time": "2026-06-01", "end_time": "2026-06-07"},
+})
 ```
 
-`result` is an `APIResult` with `status`, `data`, `errorCode`, `warnings`, `endpointId`.
+`result` is an `APIResult` with `status`, `data`, `error_code`, `warnings`, `endpoint_id`.
 
 ## When an endpoint is missing
 
@@ -71,6 +72,6 @@ Verify them against the docs before trusting empty/error results.
 
 ## Credentials
 
-Never stored here. `loadConfigFromEnv()` reads `.env.local` at the project
+Never stored here. `load_config_from_env()` reads `.env.local` at the project
 root (`DATAFINDER_BASE_URL`, `DATAFINDER_ACCESS_KEY`, `DATAFINDER_SECRET_KEY`,
 `DATAFINDER_APP_ID`, `DATAFINDER_REGION`, `DATAFINDER_SERVICE`).

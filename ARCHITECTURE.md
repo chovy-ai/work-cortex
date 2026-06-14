@@ -70,8 +70,9 @@ data-analysis/
 │   │   ├── module.json                    # Updater 契约（type=agent，含 doc_links）
 │   │   ├── manifest.json                  # 端点定义（method/path/params/doc_url）
 │   │   ├── client.ts                      # DataFinderClient + call() + 类型化 wrappers
-│   │   ├── cli.ts                         # npm run datafinder -- list/describe/call
-│   │   └── UPDATE.md                      # agent 更新流程（WebFetch 文档 → 改 manifest）
+│   │   ├── cli.ts                         # node build/.../cli.js list/describe/call
+│   │   ├── UPDATE.md                      # agent 更新流程（WebFetch 文档 → 改 manifest）
+│   │   └── index.ts
 │   │
 │   ├── metric-semantics/                  # ③ 口径语义域
 │   │   ├── module.json                    # Updater 契约（type=script，待补）
@@ -294,11 +295,11 @@ stateDiagram-v2
   "serves": ["knowledge-store/event-catalog.json"],
   "update": {
     "type": "script",                        // script=自动 | agent=需 LLM 介入
-    "cmd": "bash domains/event-knowledge/sync_nextop.sh && npx tsx domains/event-knowledge/extract_events.ts"
+    "cmd": "domains/event-knowledge/sync_nextop.sh && python3 domains/event-knowledge/extract_events.ts"
   },
   "check": {
     "type": "script",
-    "cmd": "npx tsx domains/knowledge-update/check_freshness.ts event-knowledge"
+    "cmd": "python3 domains/knowledge-update/check_freshness.ts event-knowledge"
   },
   "doc_links": []
 }
@@ -336,6 +337,8 @@ StepOutcome =
 ---
 
 ## 七、建设路线图
+
+> **实现语言约定（2026-06-12 更新）**：全仓库 TypeScript（用户决定全量迁移，Python 已清零）。工具经根目录 `npm run build:tools` 编译到 `build/`，以 `node build/domains/.../x.js` 调用。
 
 | 阶段 | 内容 | 依赖 |
 |---|---|---|

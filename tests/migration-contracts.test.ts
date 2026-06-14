@@ -1,176 +1,192 @@
-import { execFileSync } from "node:child_process";
-import { readFileSync, existsSync } from "node:fs";
-import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
+import { existsSync, readFileSync } from "node:fs";
+import * as path from "node:path";
+import { test } from "node:test";
+import { fileURLToPath } from "node:url";
 
-const root = new URL("..", import.meta.url).pathname;
+import { SchedulerState, StepOutcome } from "../domains/query-execution/scheduler/scheduler.js";
 
-function readJson<T = any>(path: string): T {
-  return JSON.parse(readFileSync(join(root, path), "utf8")) as T;
+// Compiled location: build/tests/migration-contracts.test.js — the repo root
+// is two levels up from this file.
+const HERE = path.dirname(fileURLToPath(import.meta.url));
+const ROOT = path.resolve(HERE, "..", "..");
+
+function load_json(rel_path: string): Record<string, any> {
+  return JSON.parse(readFileSync(path.join(ROOT, rel_path), "utf-8"));
 }
 
-describe("TypeScript migration contracts", () => {
-  it("keeps domain module contracts", () => {
-    const modules: Record<string, string> = {
-      "domains/event-knowledge/module.json": "event-knowledge",
-      "domains/datafinder-interface/module.json": "datafinder-interface",
-      "domains/metric-semantics/module.json": "metric-semantics"
-    };
+test("test_domain_module_contracts_exist", async (t) => {
+  const modules: Record<string, string> = {
+    "domains/event-knowledge/module.json": "event-knowledge",
+    "domains/datafinder-interface/module.json": "datafinder-interface",
+    "domains/metric-semantics/module.json": "metric-semantics",
+  };
 
-    for (const [path, expectedId] of Object.entries(modules)) {
-      const module = readJson<Record<string, unknown>>(path);
-      expect(module.id).toBe(expectedId);
-      expect(module).toHaveProperty("update");
-      expect(module).toHaveProperty("check");
-      expect(module).toHaveProperty("serves");
-    }
-  });
-
-  it("has TypeScript target files and removes Python runtime files", () => {
-    const expectedFiles = [
-      "domains/event-knowledge/sync_nextop.sh",
-      "domains/event-knowledge/extract_events.ts",
-      "domains/datafinder-interface/client.ts",
-      "domains/datafinder-interface/cli.ts",
-      "domains/datafinder-interface/manifest.json",
-      "domains/datafinder-interface/UPDATE.md",
-      "domains/datafinder-interface/README.md",
-      "domains/datafinder-interface/openapi-routing.md",
-      "domains/metric-semantics/data-model-protocol.md",
-      "domains/metric-semantics/extract_data_model.ts",
-      "domains/intent-routing/capabilities.json",
-      "domains/intent-routing/capability-inventory.md",
-      "domains/intent-routing/query-intent-protocol.md",
-      "domains/intent-routing/query-intent.schema.json",
-      "domains/query-execution/executors/kafka_executor.ts",
-      "domains/query-execution/executors/local_executor.ts",
-      "domains/query-execution/scheduler/workflow.json",
-      "domains/query-execution/scheduler/scheduler.ts",
-      "domains/knowledge-update/update_knowledge.ts",
-      "domains/knowledge-update/check_freshness.ts",
-      "domains/knowledge-update/check_capabilities_sync.ts",
-      "knowledge-store/event-catalog.json",
-      "knowledge-store/data-model.json",
-      "knowledge-store/.gitkeep",
-      "outputs/.gitkeep"
-    ];
-
-    for (const path of expectedFiles) {
-      expect(existsSync(join(root, path)), path).toBe(true);
-    }
-
-    const removedPaths = [
-      "domains/event-knowledge/extract_events.py",
-      "domains/datafinder-interface/client.py",
-      "domains/datafinder-interface/cli.py",
-      "domains/datafinder-interface/__init__.py",
-      "domains/metric-semantics/extract_data_model.py",
-      "domains/query-execution/executors/kafka_executor.py",
-      "domains/query-execution/executors/local_executor.py",
-      "domains/query-execution/scheduler/scheduler.py",
-      "tests/test_migration_contracts.py",
-      "skills/nextop-data-analytics/tools",
-      "skills/nextop-data-analytics/references"
-    ];
-
-    for (const path of removedPaths) {
-      expect(existsSync(join(root, path)), path).toBe(false);
-    }
-  });
-
-  it("keeps the event extractor on knowledge-store paths", () => {
-    const source = readFileSync(join(root, "domains/event-knowledge/extract_events.ts"), "utf8");
-    expect(source).toContain("knowledge-store");
-    expect(source).toContain("event-catalog.json");
-    expect(source).not.toContain("SKILL_ROOT");
-    expect(source).not.toContain("nextop-event-catalog.json");
-  });
-
-  it("lists verified DataFinder manifest endpoints with the TypeScript CLI", () => {
-    const manifest = readJson<any>("domains/datafinder-interface/manifest.json");
-    expect(manifest.last_verified_against_docs_at).toBeTruthy();
-    expect(manifest.endpoints.filter((ep: any) => !ep.path_verified).map((ep: any) => ep.id)).toEqual([]);
-
-    const byId = Object.fromEntries(manifest.endpoints.map((ep: any) => [ep.id, ep]));
-    const expectedProtocols: Record<string, [string, string]> = {
-      "dashboard.list": ["GET", "/datafinder/openapi/v1/{app_id}/dashboards/all"],
-      "analysis.download": ["POST", "/datafinder/openapi/v1/{app_id}/downloads"],
-      "metadata.query": ["POST", "/datafinder/openapi/v1/metadata/{app_id}/list/events"],
-      "user.query_result": ["GET", "/datafinder/openapi/v1/{app_id}/user_analysis/queries/{query_id}"],
-      "segment.query": ["GET", "/datafinder/openapi/v1/{app_id}/cohorts/{cohort_id}/sample"],
-      "tag.v1": ["POST", "/datatag/openapi/v1/app/{app_id}/tag/{tag_name}/download"],
-      "tag.v2": ["GET", "/finder/openApi/v2/cdpMeta/labelSystem/label/historyData"],
-      "raw_event.export": ["GET", "/datarangers/openapi/v1/{app_id}/exports"],
-      "usage.stats": ["POST", "/datafinder/openapi/v1/usage_amount"]
-    };
-
-    for (const [endpointId, [method, path]] of Object.entries(expectedProtocols)) {
-      expect(byId[endpointId].method).toBe(method);
-      expect(byId[endpointId].path).toBe(path);
-      expect(byId[endpointId].doc_url).toContain("volcengine.com/docs");
-    }
-    expect(byId["tag.v2"].header_params).toEqual({ tenant_id: "X-Tenant" });
-
-    const output = execFileSync("npx", ["tsx", "domains/datafinder-interface/cli.ts", "list"], {
-      cwd: root,
-      encoding: "utf8"
+  for (const [rel_path, expected_id] of Object.entries(modules)) {
+    await t.test(`rel_path=${rel_path}`, () => {
+      const module = load_json(rel_path);
+      assert.equal(module["id"], expected_id);
+      assert.ok("update" in module);
+      assert.ok("check" in module);
+      assert.ok("serves" in module);
     });
-    expect(output).toContain("DataFinder OpenAPI");
-    expect(output).not.toContain("[path UNVERIFIED]");
-  });
+  }
+});
 
-  it("prepares DataFinder path, query, header, and body params", async () => {
-    const module = await import("../domains/datafinder-interface/client.ts");
-    const client = new module.DataFinderClient({
-      baseUrl: "https://analytics.volcengineapi.com",
-      accessKey: "ak",
-      secretKey: "sk",
-      appId: 123,
-      region: "cn-north-1",
-      service: "datafinder",
-      timeoutSeconds: 30
+test("test_target_files_exist_and_legacy_files_are_removed", async (t) => {
+  const expected_files = [
+    "domains/event-knowledge/sync_nextop.sh",
+    "domains/event-knowledge/extract_events.ts",
+    "domains/datafinder-interface/client.ts",
+    "domains/datafinder-interface/cli.ts",
+    "domains/datafinder-interface/manifest.json",
+    "domains/datafinder-interface/UPDATE.md",
+    "domains/datafinder-interface/README.md",
+    "domains/datafinder-interface/openapi-routing.md",
+    "domains/metric-semantics/data-model-protocol.md",
+    "domains/metric-semantics/extract_data_model.ts",
+    "domains/intent-routing/capabilities.json",
+    "domains/intent-routing/capability-inventory.md",
+    "domains/intent-routing/query-intent-protocol.md",
+    "domains/intent-routing/query-intent.schema.json",
+    "domains/query-execution/executors/kafka_executor.ts",
+    "domains/query-execution/executors/local_executor.ts",
+    "domains/query-execution/scheduler/workflow.json",
+    "domains/query-execution/scheduler/scheduler.ts",
+    "domains/knowledge-update/update_knowledge.ts",
+    "domains/knowledge-update/check_freshness.ts",
+    "domains/knowledge-update/check_capabilities_sync.ts",
+    "knowledge-store/event-catalog.json",
+    "knowledge-store/data-model.json",
+    "knowledge-store/.gitkeep",
+    "outputs/.gitkeep",
+  ];
+  for (const rel_path of expected_files) {
+    await t.test(`rel_path=${rel_path}`, () => {
+      assert.ok(existsSync(path.join(ROOT, rel_path)), rel_path);
     });
+  }
 
-    const captured: any[] = [];
-    client.request = async (method: string, path: string, body: any, queryParams = {}, extraHeaders = {}) => {
-      captured.push({ method, path, body, query: queryParams, headers: extraHeaders });
-      return { status: "success" };
-    };
-
-    await client.querySegment(456, 30);
-    expect(captured.at(-1)).toMatchObject({
-      method: "GET",
-      path: "/datafinder/openapi/v1/123/cohorts/456/sample",
-      query: { count: 30 },
-      body: {}
+  const removed_paths = [
+    "skills/nextop-data-analytics/tools",
+    "skills/nextop-data-analytics/references",
+    "skills/nextop-data-analytics/tools/datafinder_client.py",
+    "skills/nextop-data-analytics/ARCHITECTURE.md",
+    "skills/nextop-data-analytics/DOMAIN-DESIGN.md",
+    "skills/nextop-data-analytics/EXECUTION-FLOW.md",
+  ];
+  for (const rel_path of removed_paths) {
+    await t.test(`rel_path=${rel_path}`, () => {
+      assert.ok(!existsSync(path.join(ROOT, rel_path)), rel_path);
     });
+  }
+});
 
-    await client.queryTagV2("1", 2, "2026-06-01", "2026-06-10");
-    expect(captured.at(-1).headers).toEqual({ "X-Tenant": "1" });
-    expect(captured.at(-1).query.id).toBe(2);
+test("test_event_extractor_uses_new_store_paths", () => {
+  const source = readFileSync(path.join(ROOT, "domains/event-knowledge/extract_events.ts"), "utf-8");
+  assert.ok(source.includes('path.join(REPO_ROOT, "knowledge-store", "event-catalog.json")'));
+  assert.ok(!source.includes("SKILL_ROOT"));
+  assert.ok(!source.includes("nextop-event-catalog.json"));
+});
 
-    await client.createUserQuery("cohort", { cohort_id: 456 }, undefined, undefined, 100);
-    expect(captured.at(-1).method).toBe("POST");
-    expect(captured.at(-1).path).toBe("/datafinder/openapi/v1/123/user_analysis/queries");
-    expect(captured.at(-1).body.query_type).toBe("cohort");
-    expect(captured.at(-1).body.cohort).toEqual({ cohort_id: 456 });
-  });
+test("test_datafinder_manifest_is_verified_and_cli_lists_without_legacy_package", async (t) => {
+  const manifest = load_json("domains/datafinder-interface/manifest.json");
+  assert.ok(manifest["last_verified_against_docs_at"]);
+  const unverified = (manifest["endpoints"] as Record<string, any>[])
+    .filter((ep) => !ep["path_verified"])
+    .map((ep) => ep["id"]);
+  assert.deepEqual(unverified, []);
 
-  it("keeps capabilities in sync with manifest", () => {
-    const output = execFileSync("npx", ["tsx", "domains/knowledge-update/check_capabilities_sync.ts"], {
-      cwd: root,
-      encoding: "utf8"
+  const by_id: Record<string, Record<string, any>> = {};
+  for (const ep of manifest["endpoints"] as Record<string, any>[]) {
+    by_id[ep["id"]] = ep;
+  }
+  const expected_protocols: Record<string, [string, string]> = {
+    "dashboard.list": ["GET", "/datafinder/openapi/v1/{app_id}/dashboards/all"],
+    "analysis.download": ["POST", "/datafinder/openapi/v1/{app_id}/downloads"],
+    "metadata.query": ["POST", "/datafinder/openapi/v1/metadata/{app_id}/list/events"],
+    "user.query_result": ["GET", "/datafinder/openapi/v1/{app_id}/user_analysis/queries/{query_id}"],
+    "segment.query": ["GET", "/datafinder/openapi/v1/{app_id}/cohorts/{cohort_id}/sample"],
+    "tag.v1": ["POST", "/datatag/openapi/v1/app/{app_id}/tag/{tag_name}/download"],
+    "tag.v2": ["GET", "/finder/openApi/v2/cdpMeta/labelSystem/label/historyData"],
+    "raw_event.export": ["GET", "/datarangers/openapi/v1/{app_id}/exports"],
+    "usage.stats": ["POST", "/datafinder/openapi/v1/usage_amount"],
+  };
+  for (const [endpoint_id, [method, expected_path]] of Object.entries(expected_protocols)) {
+    await t.test(`endpoint_id=${endpoint_id}`, () => {
+      assert.equal(by_id[endpoint_id]["method"], method);
+      assert.equal(by_id[endpoint_id]["path"], expected_path);
+      assert.ok(String(by_id[endpoint_id]["doc_url"]).includes("volcengine.com/docs"));
     });
-    expect(output).toContain("capabilities sync: ok");
-  });
+  }
+  assert.deepEqual(by_id["tag.v2"]["header_params"], { tenant_id: "X-Tenant" });
 
-  it("persists awaiting scheduler state", async () => {
-    const module = await import("../domains/query-execution/scheduler/scheduler.ts");
-    const outcome = module.StepOutcome.awaitInput("user_review", { review_card: "confirm" });
-    expect(outcome.status).toBe("await_input");
-    const state = new module.SchedulerState("contract-test", "user_review", { run_id: "contract-test" });
-    state.apply(outcome);
-    expect(state.status).toBe("awaiting_input");
-    expect(state.awaitingStep).toBe("user_review");
+  const result = spawnSync("node", ["build/domains/datafinder-interface/cli.js", "list"], {
+    cwd: ROOT,
+    encoding: "utf-8",
+    timeout: 10000,
   });
+  assert.equal(result.status, 0, result.stderr);
+  assert.ok(result.stdout.includes("DataFinder OpenAPI"));
+  assert.ok(!result.stdout.includes("[path UNVERIFIED]"));
+});
+
+test("test_datafinder_client_prepares_path_query_header_and_body_params", async () => {
+  const { DataFinderClient } = await import("../domains/datafinder-interface/client.js");
+  const client = new DataFinderClient({
+    base_url: "https://analytics.volcengineapi.com",
+    access_key: "ak",
+    secret_key: "sk",
+    app_id: 123,
+  });
+  const captured: Record<string, any>[] = [];
+  (client as any).request = async (
+    method: string,
+    reqPath: string,
+    body: Record<string, unknown>,
+    queryParams?: Record<string, unknown>,
+    extraHeaders?: Record<string, string>,
+  ) => {
+    captured.push({ method, path: reqPath, body, query: queryParams ?? {}, headers: extraHeaders ?? {} });
+    return { status: "success", warnings: [] };
+  };
+
+  await client.querySegment(456, 30);
+  assert.equal(captured.at(-1)!["method"], "GET");
+  assert.equal(captured.at(-1)!["path"], "/datafinder/openapi/v1/123/cohorts/456/sample");
+  assert.deepEqual(captured.at(-1)!["query"], { count: 30 });
+  assert.deepEqual(captured.at(-1)!["body"], {});
+
+  await client.queryTagV2("1", 2, "2026-06-01", "2026-06-10");
+  assert.equal(captured.at(-1)!["method"], "GET");
+  assert.equal(captured.at(-1)!["path"], "/finder/openApi/v2/cdpMeta/labelSystem/label/historyData");
+  assert.deepEqual(captured.at(-1)!["headers"], { "X-Tenant": "1" });
+  assert.equal(captured.at(-1)!["query"]["id"], 2);
+
+  await client.createUserQuery("cohort", { cohort_id: 456 }, undefined, undefined, 100);
+  assert.equal(captured.at(-1)!["method"], "POST");
+  assert.equal(captured.at(-1)!["path"], "/datafinder/openapi/v1/123/user_analysis/queries");
+  assert.equal(captured.at(-1)!["body"]["query_type"], "cohort");
+  assert.deepEqual(captured.at(-1)!["body"]["cohort"], { cohort_id: 456 });
+});
+
+test("test_capabilities_are_in_sync_with_manifest", () => {
+  const result = spawnSync("node", ["build/domains/knowledge-update/check_capabilities_sync.js"], {
+    cwd: ROOT,
+    encoding: "utf-8",
+    timeout: 10000,
+  });
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.ok(result.stdout.includes("capabilities sync: ok"));
+});
+
+test("test_scheduler_persists_awaiting_state", () => {
+  const ctx: Record<string, any> = { run_id: "contract-test", query_path: "raw_analysis" };
+  const outcome = StepOutcome.await_input("user_review", { review_card: "confirm" });
+  assert.equal(outcome.status, "await_input");
+  const state = new SchedulerState({ run_id: ctx["run_id"], current_step: "user_review", context: ctx });
+  state.apply(outcome);
+  assert.equal(state.status, "awaiting_input");
+  assert.equal(state.awaiting_step, "user_review");
 });

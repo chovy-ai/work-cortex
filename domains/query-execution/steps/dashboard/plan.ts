@@ -1,16 +1,19 @@
-import { StepOutcome, type Context } from "../../scheduler/scheduler.ts";
+/** 5A: build dashboard QueryPlan. */
 
-export function run(ctx: Context): StepOutcome {
-  const slots = ctx.query_intent?.slots ?? {};
-  const timeRange = slots.time_range ?? ctx.time_range;
-  if (!ctx.asset_id || !timeRange) {
-    return StepOutcome.awaitInput("dashboard.plan", { missing: "asset_id or time_range" });
+import { StepOutcome } from "../../scheduler/scheduler.js";
+
+export function run(ctx: Record<string, any>): StepOutcome {
+  const intent = ctx["query_intent"] ?? {};
+  const slots = intent["slots"] ?? {};
+  const time_range = slots["time_range"] || ctx["time_range"];
+  if (!ctx["asset_id"] || !time_range) {
+    return StepOutcome.await_input("dashboard.plan", { missing: "asset_id or time_range" });
   }
   return StepOutcome.next({
     query_plan: {
       query_path: "dashboard",
-      asset_id: ctx.asset_id,
-      time_range: timeRange
-    }
+      asset_id: ctx["asset_id"],
+      time_range,
+    },
   });
 }

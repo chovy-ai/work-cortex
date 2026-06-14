@@ -1,12 +1,14 @@
-import { StepOutcome, type Context } from "../../scheduler/scheduler.ts";
+/** 4B-5B: apply semantics and select raw-analysis data path. */
 
-export function run(ctx: Context): StepOutcome {
-  const intent = ctx.query_intent ?? {};
+import { StepOutcome } from "../../scheduler/scheduler.js";
+
+export function run(ctx: Record<string, any>): StepOutcome {
+  const intent = ctx["query_intent"] ?? {};
   return StepOutcome.next({
     raw_context: {
       intent,
       data_model: "knowledge-store/data-model.json",
-      selected_source: intent.source ?? "datafinder.openapi.analysis_query"
-    }
+      selected_source: intent["source"] ?? "datafinder.openapi.analysis_query",
+    },
   });
 }

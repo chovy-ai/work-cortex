@@ -1,0 +1,73 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "envelope.schema.json",
+  "title": "Envelope",
+  "description": "接缝一入站契约：连接器把渠道原始事件翻译成统一信封",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["v", "event_id", "dedup_key", "channel", "received_at", "conversation", "principal", "kind"],
+  "properties": {
+    "v": { "const": 1 },
+    "event_id": { "type": "string", "minLength": 1 },
+    "dedup_key": { "type": "string", "minLength": 1 },
+    "channel": { "type": "string", "minLength": 1 },
+    "received_at": { "type": "string", "format": "date-time" },
+    "conversation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "thread_id", "type"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "thread_id": { "type": ["string", "null"] },
+        "type": { "enum": ["p2p", "group"] },
+        "source_message_id": { "type": ["string", "null"], "description": "R3：thread 回复定位用的源消息 id" }
+      }
+    },
+    "principal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["channel_user_id"],
+      "properties": {
+        "channel_user_id": { "type": "string", "minLength": 1 },
+        "display_name": { "type": "string" }
+      }
+    },
+    "kind": { "enum": ["message", "action", "system"] },
+    "message": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["text"],
+      "properties": {
+        "text": { "type": "string" },
+        "attachments": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["type", "ref"],
+            "properties": {
+              "type": { "enum": ["image", "file"] },
+              "ref": { "type": "string" },
+              "name": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+    "action": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["run_id", "action_id"],
+      "properties": {
+        "run_id": { "type": "string", "minLength": 1 },
+        "action_id": { "enum": ["confirm", "revise", "cancel"] },
+        "params": { "type": "object" }
+      }
+    },
+    "raw_ref": { "type": ["string", "null"], "description": "R1：M0 管道直读无落盘，恒为 null" }
+  },
+  "allOf": [
+    { "if": { "properties": { "kind": { "const": "message" } } }, "then": { "required": ["message"] } },
+    { "if": { "properties": { "kind": { "const": "action" } } }, "then": { "required": ["action"] } }
+  ]
+}
