@@ -492,10 +492,13 @@ impl ConsoleApp {
             self.notify("无法获取窗口位置，截图失败");
             return;
         };
-        // 元素矩形上扩 30（容纳 caption）、四周留白 10。
-        let mut region = m.rect;
-        region.min.y -= 30.0;
-        let region = region.expand(10.0);
+        // 截图区域 = 元素矩形 ∪ 标注 caption 实际矩形，再四周留白 10。
+        // caption 高度按字体动态算、且可能翻到元素下方，固定上扩 30 框不住贴顶元素的
+        // caption（会被上边界截掉），故直接 union 它的真实矩形。
+        let galley = ctx.fonts(|f| {
+            f.layout_no_wrap(annotation_text(m), FontId::proportional(ANNOTATION_FONT), Color32::WHITE)
+        });
+        let region = m.rect.union(annotation_box_rect(galley.size(), m)).expand(10.0);
         let x = inner.min.x + region.min.x;
         let y = inner.min.y + region.min.y;
         self.mark_seq += 1;
@@ -1486,25 +1489,39 @@ fn darken(c: Color32, f: f32) -> Color32 {
 }
 
 /// 在选中元素上画珊瑚描边 + caption（元素名 / 尺寸 / 评论），供抓屏。
-fn draw_annotation(painter: &egui::Painter, m: &Mark) {
-    painter.rect_stroke(m.rect, Rounding::same(8.0), Stroke::new(2.5, Palette::ACCENT));
+/// 标注 caption 字号与内边距（draw_annotation 与 do_capture 共用，保证「画哪截哪」一致）。
+const ANNOTATION_FONT: f32 = 12.0;
+fn annotation_pad() -> egui::Vec2 {
+    vec2(8.0, 4.0)
+}
+
+/// 标注 caption 文本：元素名 · 尺寸 ·（评论）。
+fn annotation_text(m: &Mark) -> String {
     let mut txt = format!("{}  ·  {}×{}", m.name, m.rect.width() as i32, m.rect.height() as i32);
     if !m.comment.is_empty() {
         txt = format!("{txt}  ·  {}", m.comment);
     }
-    let galley = painter.layout_no_wrap(txt, FontId::proportional(12.0), Color32::WHITE);
-    let pad = vec2(8.0, 4.0);
-    let box_size = galley.size() + pad * 2.0;
+    txt
+}
+
+/// caption 框的逻辑矩形：默认贴在元素上方；若上方放不下（贴近窗口顶端）则翻到下方。
+/// `galley_size` 为文本测量尺寸（do_capture 走 ctx.fonts，draw_annotation 走 painter）。
+fn annotation_box_rect(galley_size: egui::Vec2, m: &Mark) -> Rect {
+    let box_size = galley_size + annotation_pad() * 2.0;
     let mut min = Pos2::new(m.rect.left(), m.rect.top() - box_size.y - 4.0);
     if min.y < 2.0 {
-        min.y = m.rect.bottom() + 4.0;
+        min.y = m.rect.bottom() + 4.0; // 上方不够 → 翻到元素下方
     }
-    painter.rect_filled(
-        Rect::from_min_size(min, box_size),
-        Rounding::same(5.0),
-        Palette::ACCENT,
-    );
-    painter.galley(min + pad, galley, Color32::WHITE);
+    Rect::from_min_size(min, box_size)
+}
+
+fn draw_annotation(painter: &egui::Painter, m: &Mark) {
+    painter.rect_stroke(m.rect, Rounding::same(8.0), Stroke::new(2.5, Palette::ACCENT));
+    let galley =
+        painter.layout_no_wrap(annotation_text(m), FontId::proportional(ANNOTATION_FONT), Color32::WHITE);
+    let rect = annotation_box_rect(galley.size(), m);
+    painter.rect_filled(rect, Rounding::same(5.0), Palette::ACCENT);
+    painter.galley(rect.min + annotation_pad(), galley, Color32::WHITE);
 }
 
 /// 状态胶囊（工具栏内）。
