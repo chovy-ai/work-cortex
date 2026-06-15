@@ -1,54 +1,25 @@
 #!/usr/bin/env node
-/** Extract nextop analytics data model facts into knowledge-store. */
+/** Extract the target application's analytics data model facts into knowledge-store. */
 
 import * as fs from "node:fs";
-import * as os from "node:os";
 import * as path from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { dataAnalysisRoot, loadAppConfig, resolveOutput, resolveTargetRepo } from "../app-config/config.js";
 
-const DESCRIPTION = "Extract nextop analytics data model facts into knowledge-store.";
+const DESCRIPTION = "Extract the target application's analytics data model facts into knowledge-store.";
 
-/** Resolve to an absolute, symlink-free path (Python Path.resolve equivalent). */
-function resolvePath(p: string): string {
-  try {
-    return fs.realpathSync(path.resolve(p));
-  } catch {
-    return path.resolve(p);
-  }
-}
+const HERE = path.dirname(fileURLToPath(import.meta.url));
+const REPO_ROOT = dataAnalysisRoot(HERE);
+const CONFIG = loadAppConfig(REPO_ROOT);
+const OUTPUT_FILE = resolveOutput(CONFIG.output.dataModel, REPO_ROOT);
 
-/** Python Path.expanduser equivalent for "~" / "~/..." prefixes. */
-function expandUser(p: string): string {
-  if (p === "~" || p.startsWith("~/")) {
-    return path.join(os.homedir(), p.slice(1));
-  }
-  return p;
-}
+const DEFAULTS_RELPATH = CONFIG.sources.dataModel.defaults;
+const REPORTER_RELPATH = CONFIG.sources.dataModel.reporter;
+const TRACKING_DOC_RELPATH = CONFIG.sources.dataModel.trackingDoc;
 
-const HERE = resolvePath(path.dirname(fileURLToPath(import.meta.url)));
-// Compiled file lives at build/domains/metric-semantics/extract_data_model.js,
-// one level deeper than the .py original, so each candidate gains one "..".
-let REPO_ROOT = path.resolve(HERE, "..", "..", "..", "..");
-if (path.basename(REPO_ROOT) !== "data-analysis") {
-  REPO_ROOT = path.resolve(HERE, "..", "..", "..");
-}
-const NEXTOP_DEFAULT = resolvePath(path.join(path.dirname(REPO_ROOT), "nextop"));
-const OUTPUT_FILE = path.join(REPO_ROOT, "knowledge-store", "data-model.json");
-
-const DEFAULTS_RELPATH = "config/nextop.defaults.json";
-const REPORTER_RELPATH = "services/nextopd/service/reporter/tea_reporter.go";
-const TRACKING_DOC_RELPATH = "docs/architecture/analytics-tracking.md";
-
-function nextopRoot(override: string | null = null): string {
-  if (override) {
-    return resolvePath(expandUser(override));
-  }
-  const env = process.env["NEXTOP_REPO_PATH"];
-  if (env) {
-    return resolvePath(expandUser(env));
-  }
-  return NEXTOP_DEFAULT;
+function appRepoRoot(override: string | null = null): string {
+  return resolveTargetRepo(override, REPO_ROOT);
 }
 
 function gitCommit(repo: string): string {
@@ -64,8 +35,8 @@ function gitCommit(repo: string): string {
   return result.status === 0 ? (result.stdout ?? "").trim() : "unknown";
 }
 
-function loadDefaults(nextop: string): Record<string, any> {
-  const p = path.join(nextop, DEFAULTS_RELPATH);
+function loadDefaults(appRepo: string): Record<string, any> {
+  const p = path.join(appRepo, DEFAULTS_RELPATH);
   if (!fs.existsSync(p)) {
     return {};
   }
@@ -91,8 +62,8 @@ function extractGoStringList(pattern: RegExp, content: string): string[] {
   return Array.from(match[1]!.matchAll(/"([^"]+)"/g), (m) => m[1]!);
 }
 
-function loadReporterSemantics(nextop: string): [string[], string[]] {
-  const p = path.join(nextop, REPORTER_RELPATH);
+function loadReporterSemantics(appRepo: string): [string[], string[]] {
+  const p = path.join(appRepo, REPORTER_RELPATH);
   if (!fs.existsSync(p)) {
     return [[], []];
   }
@@ -115,8 +86,8 @@ function stripChars(s: string, chars: string): string {
   return s.slice(start, end);
 }
 
-function loadTrackingDoc(nextop: string): Record<string, any> {
-  const p = path.join(nextop, TRACKING_DOC_RELPATH);
+function loadTrackingDoc(appRepo: string): Record<string, any> {
+  const p = path.join(appRepo, TRACKING_DOC_RELPATH);
   if (!fs.existsSync(p)) {
     return { path: TRACKING_DOC_RELPATH, exists: false, summary: "" };
   }
@@ -141,13 +112,13 @@ function isoNowUtc(): string {
   return micros === 0 ? `${base}+00:00` : `${base}.${pad(micros, 6)}+00:00`;
 }
 
-function buildModel(nextop: string): Record<string, any> {
-  const [common, stripped] = loadReporterSemantics(nextop);
+function buildModel(appRepo: string): Record<string, any> {
+  const [common, stripped] = loadReporterSemantics(appRepo);
   return {
     generated_at: isoNowUtc(),
-    nextop_commit: gitCommit(nextop),
-    nextop_path: nextop,
-    defaults: loadDefaults(nextop),
+    source_commit: gitCommit(appRepo),
+    source_path: appRepo,
+    defaults: loadDefaults(appRepo),
     default_metric_policy: {
       dau: {
         identity: "device_id",
@@ -156,9 +127,9 @@ function buildModel(nextop: string): Record<string, any> {
         event_time_preference: "client_ts / local_time_ms",
       },
     },
-    nextopd_common_params: common,
+    reporter_common_params: common,
     renderer_stripped_params: stripped,
-    tracking_doc: loadTrackingDoc(nextop),
+    tracking_doc: loadTrackingDoc(appRepo),
     sources: {
       defaults: DEFAULTS_RELPATH,
       reporter: REPORTER_RELPATH,
@@ -167,11 +138,11 @@ function buildModel(nextop: string): Record<string, any> {
   };
 }
 
-/** argparse equivalent for: --nextop-path PATH, -h/--help. */
-function parseArgs(argv: string[]): { nextopPath: string | null } {
+/** argparse equivalent for: --app-path PATH, -h/--help. */
+function parseArgs(argv: string[]): { appPath: string | null } {
   const prog = path.basename(process.argv[1] ?? "extract_data_model.js");
-  const usage = `usage: ${prog} [-h] [--nextop-path NEXTOP_PATH]`;
-  let nextopPath: string | null = null;
+  const usage = `usage: ${prog} [-h] [--app-path APP_PATH]`;
+  let appPath: string | null = null;
   const extras: string[] = [];
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i]!;
@@ -179,19 +150,19 @@ function parseArgs(argv: string[]): { nextopPath: string | null } {
       console.log(
         `${usage}\n\n${DESCRIPTION}\n\noptional arguments:\n`
         + `  -h, --help            show this help message and exit\n`
-        + `  --nextop-path NEXTOP_PATH\n`
-        + `                        Override path to nextop monorepo root`,
+        + `  --app-path APP_PATH\n`
+        + `                        Override path to the application monorepo root`,
       );
       process.exit(0);
-    } else if (arg === "--nextop-path") {
+    } else if (arg === "--app-path") {
       if (i + 1 >= argv.length) {
         console.error(usage);
-        console.error(`${prog}: error: argument --nextop-path: expected one argument`);
+        console.error(`${prog}: error: argument --app-path: expected one argument`);
         process.exit(2);
       }
-      nextopPath = argv[++i]!;
-    } else if (arg.startsWith("--nextop-path=")) {
-      nextopPath = arg.slice("--nextop-path=".length);
+      appPath = argv[++i]!;
+    } else if (arg.startsWith("--app-path=")) {
+      appPath = arg.slice("--app-path=".length);
     } else {
       extras.push(arg);
     }
@@ -201,19 +172,19 @@ function parseArgs(argv: string[]): { nextopPath: string | null } {
     console.error(`${prog}: error: unrecognized arguments: ${extras.join(" ")}`);
     process.exit(2);
   }
-  return { nextopPath };
+  return { appPath };
 }
 
 function main(): number {
   const args = parseArgs(process.argv.slice(2));
 
-  const nextop = nextopRoot(args.nextopPath);
-  if (!fs.existsSync(nextop)) {
-    console.error(`ERROR: nextop repo not found at ${nextop}`);
+  const appRepo = appRepoRoot(args.appPath);
+  if (!fs.existsSync(appRepo)) {
+    console.error(`ERROR: application repo not found at ${appRepo}`);
     process.exit(1);
   }
 
-  const model = buildModel(nextop);
+  const model = buildModel(appRepo);
   fs.mkdirSync(path.dirname(OUTPUT_FILE), { recursive: true });
   fs.writeFileSync(OUTPUT_FILE, JSON.stringify(model, null, 2) + "\n", "utf-8");
   console.log(`Wrote data model -> ${OUTPUT_FILE}`);

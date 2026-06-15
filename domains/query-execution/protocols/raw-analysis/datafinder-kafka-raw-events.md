@@ -13,13 +13,13 @@ The official Kafka subscription doc describes these primary topics:
 - `item_profile`: business object property events
 - `ad_event_v2`: advertising monitoring/unified raw ad events
 
-For nextop product analytics, start with `behavior_event`.
+For application product analytics, start with `behavior_event`.
 
 ## Key Fields For Behavior Events
 
 Typical fields used in analysis:
 
-- `header.app_id`: application id; filter to current nextop app id
+- `header.app_id`: application id; filter to the current application app id
 - `event_name`: product event name
 - `params`: event params, often encoded as a JSON string
 - `user.user_unique_id`: product user id when available

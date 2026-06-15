@@ -29,7 +29,7 @@ Keep these as-is:
 - JSON schema files.
 - `manifest.json`, `capabilities.json`, `registry.json`, and `module.json` files, except command strings that must point at TypeScript entrypoints.
 - `knowledge-store/*.json` generated artifacts.
-- Shell scripts such as `domains/event-knowledge/sync_nextop.sh`.
+- Shell scripts such as `domains/event-knowledge/sync_app.sh`.
 
 ## Approach
 
@@ -143,7 +143,7 @@ npm run datafinder -- list
 npm run knowledge -- status
 ```
 
-`npm run knowledge -- status` may report stale or unknown when local `nextop` or generated knowledge artifacts are unavailable. That is acceptable if the command runs and reports structured status.
+`npm run knowledge -- status` may report stale or unknown when the local application repo or generated knowledge artifacts are unavailable. That is acceptable if the command runs and reports structured status.
 
 ## Risks
 

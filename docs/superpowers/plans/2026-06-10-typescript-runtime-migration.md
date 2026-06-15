@@ -31,7 +31,7 @@
 - Delete: `domains/datafinder-interface/cli.py`
 - Delete: `domains/datafinder-interface/__init__.py`
 - Modify: `domains/datafinder-interface/README.md`
-- Modify: `skills/nextop-data-analytics/SKILL.md`
+- Modify: `skills/data-analytics/SKILL.md`
 
 - [x] Implement manifest loading, endpoint discovery, request preparation, Volcengine signing, normalized results, typed wrappers, and env loading in TypeScript.
 - [x] Implement the discovery/call CLI in TypeScript.

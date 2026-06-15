@@ -225,7 +225,7 @@ function buildPrompt(task: Task): string {
   return [
     loadPersona(),
     "",
-    "你是数据分析执行器，按 skills/nextop-data-analytics/SKILL.md 工作。",
+    "你是数据分析执行器，按 skills/data-analytics/SKILL.md 工作。",
     "本次只允许走 dashboard 路径（已有报表查询）；禁止 raw_analysis。",
     "",
     "硬性约束（违反任何一条都是错误）：",

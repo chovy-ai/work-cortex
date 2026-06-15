@@ -1,6 +1,6 @@
 # 火山引擎 DataFinder OpenAPI 能力选择
 
-This file is the routing reference for deciding whether DataFinder OpenAPI can answer a nextop analytics question. Prefer official links over copied endpoint details so documentation changes remain visible.
+This file is the routing reference for deciding whether DataFinder OpenAPI can answer an application analytics question. Prefer official links over copied endpoint details so documentation changes remain visible.
 
 ## Start Here
 

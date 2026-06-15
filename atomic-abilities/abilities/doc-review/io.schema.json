@@ -1,0 +1,32 @@
+{
+  "input": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["diff"],
+    "properties": {
+      "diff": { "type": "string", "minLength": 1 },
+      "files": { "type": "array", "items": { "type": "string" } }
+    }
+  },
+  "output": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["issues"],
+    "properties": {
+      "issues": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["file", "severity", "note"],
+          "properties": {
+            "file": { "type": "string" },
+            "line": { "type": "integer" },
+            "severity": { "enum": ["high", "med", "low"] },
+            "note": { "type": "string" }
+          }
+        }
+      }
+    }
+  }
+}

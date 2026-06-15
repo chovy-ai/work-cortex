@@ -1,4 +1,4 @@
-# nextop-data-analytics 架构设计
+# data-analytics 架构设计
 
 > 单一权威文档。覆盖：领域划分、目录结构（现状 + 目标）、架构图、各领域职责与文件清单。
 
@@ -39,9 +39,9 @@
 
 | 领域 | 职责 | 真相源 | 闭环状态 |
 |---|---|---|---|
-| ① 代码事件知识域 | nextop 有哪些事件、参数、上报时机 | nextop 源码 | ✅ 已闭环 |
+| ① 代码事件知识域 | 应用有哪些事件、参数、上报时机 | 应用源码 | ✅ 已闭环 |
 | ② DataFinder 接口域 | DataFinder API 端点定义 + 文档链接 + 运行时调用 | 火山引擎官方文档 | ✅ 已闭环 |
-| ③ 口径语义域 | DAU 口径、身份键、nextopd 公共参数、默认指标定义 | nextopd 实现 + nextop.defaults.json | ⚠️ 半闭环（待补提取脚本） |
+| ③ 口径语义域 | DAU 口径、身份键、reporter 服务公共参数、默认指标定义 | reporter 服务实现 + config/app.defaults.json | ⚠️ 半闭环（待补提取脚本） |
 | ④ 知识更新触发域 | 注册各域 Updater，统一 status / update | — | 🆕 待建 |
 | ⑤ 意图路由域 | NL → QueryIntent，匹配能力，决定 query_path | capabilities.json（派生自①②③） | ⚠️ 手写待派生 |
 | ⑥ 查询执行域 | QueryIntent → Plan → Compile → Execute → Result；两策略，gate 可打回 | — | 🔄 生命周期闭环 |
@@ -63,7 +63,7 @@ data-analysis/
 │   │
 │   ├── event-knowledge/                   # ① 代码事件知识域
 │   │   ├── module.json                    # Updater 契约（type=script）
-│   │   ├── sync_nextop.sh                 # git clone / pull nextop 仓库
+│   │   ├── sync_app.sh                    # git clone / pull 应用仓库
 │   │   └── extract_events.ts              # 解析源码 → event-catalog.json
 │   │
 │   ├── datafinder-interface/              # ② DataFinder 接口域
@@ -76,7 +76,7 @@ data-analysis/
 │   │
 │   ├── metric-semantics/                  # ③ 口径语义域
 │   │   ├── module.json                    # Updater 契约（type=script，待补）
-│   │   ├── extract_data_model.ts          # 🆕 待建：从 nextop 代码提取
+│   │   ├── extract_data_model.ts          # 🆕 待建：从应用代码提取
 │   │   └── data-model-protocol.md         # 手写口径规范（过渡期）
 │   │
 │   ├── knowledge-update/                  # ④ 知识更新触发域（控制平面）
@@ -144,20 +144,20 @@ data-analysis/
 ```
 现状路径                                              → 目标路径
 ─────────────────────────────────────────────────────────────────────
-skills/nextop-data-analytics/tools/sync_nextop.sh    → domains/event-knowledge/sync_nextop.sh
-skills/nextop-data-analytics/tools/extract_events.ts → domains/event-knowledge/extract_events.ts
-skills/nextop-data-analytics/tools/datafinder/      → domains/datafinder-interface/
-skills/nextop-data-analytics/tools/kafka_executor.ts → domains/query-execution/executors/kafka_executor.ts
-skills/nextop-data-analytics/tools/local_executor.ts → domains/query-execution/executors/local_executor.ts
+skills/data-analytics/tools/sync_app.sh             → domains/event-knowledge/sync_app.sh
+skills/data-analytics/tools/extract_events.ts       → domains/event-knowledge/extract_events.ts
+skills/data-analytics/tools/datafinder/             → domains/datafinder-interface/
+skills/data-analytics/tools/kafka_executor.ts       → domains/query-execution/executors/kafka_executor.ts
+skills/data-analytics/tools/local_executor.ts       → domains/query-execution/executors/local_executor.ts
 references/common/capabilities.json                 → domains/intent-routing/capabilities.json
 references/common/query-intent-protocol.md          → domains/intent-routing/query-intent-protocol.md
 references/common/query-intent.schema.json          → domains/intent-routing/query-intent.schema.json
 references/common/capability-inventory.md           → domains/intent-routing/capability-inventory.md
-references/common/nextop-analytics-data-model.md    → domains/metric-semantics/data-model-protocol.md
+references/common/analytics-data-model.md           → domains/metric-semantics/data-model-protocol.md
 references/common/volcengine-openapi-capabilities.md → domains/datafinder-interface/（合并到 manifest + README）
 references/dashboard/                               → domains/query-execution/protocols/dashboard/
 references/raw_analysis/                            → domains/query-execution/protocols/raw-analysis/
-references/common/nextop-event-catalog.json         → knowledge-store/event-catalog.json
+references/common/event-catalog.json                → knowledge-store/event-catalog.json
 ```
 
 ---
@@ -170,7 +170,7 @@ references/common/nextop-event-catalog.json         → knowledge-store/event-ca
 flowchart TB
     subgraph TRUTH["外部真相源"]
         direction LR
-        S1[("nextop 源码")]
+        S1[("应用源码")]
         S2[("火山引擎文档")]
     end
 
@@ -290,12 +290,12 @@ stateDiagram-v2
 ```jsonc
 {
   "id": "event-knowledge",
-  "description": "nextop 事件目录（名称/参数/上报时机）",
-  "truth_source": "nextop 源码 github.com/nextop-os/nextop",
+  "description": "应用事件目录（名称/参数/上报时机）",
+  "truth_source": "应用源码 github.com/your-org/your-app",
   "serves": ["knowledge-store/event-catalog.json"],
   "update": {
     "type": "script",                        // script=自动 | agent=需 LLM 介入
-    "cmd": "domains/event-knowledge/sync_nextop.sh && python3 domains/event-knowledge/extract_events.ts"
+    "cmd": "domains/event-knowledge/sync_app.sh && python3 domains/event-knowledge/extract_events.ts"
   },
   "check": {
     "type": "script",

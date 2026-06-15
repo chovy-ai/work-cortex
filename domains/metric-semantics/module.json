@@ -1,7 +1,7 @@
 {
   "id": "metric-semantics",
-  "description": "DAU口径/身份键/nextopd公共参数/默认指标定义",
-  "truth_source": "nextop 源码（tea_reporter.go + nextop.defaults.json）",
+  "description": "DAU口径/身份键/reporter公共参数/默认指标定义",
+  "truth_source": "应用源码（reporter 实现 + 埋点默认值，见 app.config.json）",
   "serves": [
     "knowledge-store/data-model.json"
   ],

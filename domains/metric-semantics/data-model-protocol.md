@@ -1,19 +1,25 @@
-# nextop Analytics Data Model
+# Application Analytics Data Model
+
+> 这是通用口径协议模板。具体应用的真实路径/取值由 `app.config.json` 指定，并由
+> `extract_data_model` 抽取进 `knowledge-store/data-model.json`；下文 `<app-repo>` /
+> `<your-app-id>` 等为占位符。
 
 ## Repository Sources
 
-- Architecture: `/Users/zhengweibin/Desktop/team-shell/nextop/docs/architecture/analytics-tracking.md`
-- DataFinder defaults: `/Users/zhengweibin/Desktop/team-shell/nextop/config/nextop.defaults.json`
-- nextopd reporter implementation: `/Users/zhengweibin/Desktop/team-shell/nextop/services/nextopd/service/reporter/tea_reporter.go`
-- Renderer analytics reporters: `/Users/zhengweibin/Desktop/team-shell/nextop/apps/desktop/src/renderer/src/features/analytics/reporters`
+（均相对应用 repo 根，实际路径见 `app.config.json` 的 `sources`）
+
+- Architecture: `<app-repo>/path/to/analytics-tracking.md`
+- DataFinder defaults: `<app-repo>/config/app.defaults.json`
+- Reporter service implementation: `<app-repo>/path/to/reporter/tea_reporter.go`
+- Renderer analytics reporters: `<app-repo>/path/to/analytics/reporters`
 
 ## Current App Defaults
 
-As of this skill creation, `nextop/config/nextop.defaults.json` defines:
+应用的埋点默认值文件（`app.config.json` → `sources.dataModel.defaults`）通常定义：
 
-- DataFinder `appId`: `20004134`
-- `appName`: `tutti`
-- channel domain: `https://gator.uba.ap-southeast-1.volces.com`
+- DataFinder `appId`: `<your-app-id>`
+- `appName`: `<your-app-name>`
+- channel domain: `<your-channel-domain>`
 - analytics app version default: `0.0.0`
 
 Always re-read the defaults file before making a real query because these values may change.
@@ -25,9 +31,9 @@ Renderer events:
 ```text
 renderer reporter
 -> IReporterService.trackEvents()
--> NextopdClient.trackEvents()
+-> daemon client.trackEvents()
 -> POST /v1/track
--> nextopd Reporter.Track()
+-> reporter service Track()
 -> TeaReporter / DataFinder SDK
 -> DataFinder backend
 ```
@@ -44,12 +50,12 @@ daemon workflow
 
 `TeaReporter` injects these common params:
 
-- `device_id`: stable UUID persisted in nextop state dir
-- `session_id`: UUID generated once per nextopd startup
-- `app_version`: resolved from nextop defaults/env
+- `device_id`: stable UUID persisted in the app's state dir
+- `session_id`: UUID generated once per reporter-service startup
+- `app_version`: resolved from app defaults/env
 - `os`: Go runtime OS name
 
-`TeaReporter` removes renderer-supplied `device_id`, `session_id`, `app_version`, and `os` from event params before sending. Treat nextopd-owned values as authoritative.
+`TeaReporter` removes renderer-supplied `device_id`, `session_id`, `app_version`, and `os` from event params before sending. Treat reporter-service-owned values as authoritative.
 
 ## Event Names
 
@@ -64,8 +70,8 @@ Event names follow dot-separated product domains, for example:
 
 Before doing event-specific analysis, inspect:
 
-- `/Users/zhengweibin/Desktop/team-shell/nextop/apps/desktop/src/renderer/src/features/analytics/reporters/reporterCompleteness.test.ts`
-- reporter directories under `/Users/zhengweibin/Desktop/team-shell/nextop/apps/desktop/src/renderer/src/features/analytics/reporters`
+- `<app-repo>/path/to/analytics/reporters/reporterCompleteness.test.ts`
+- reporter directories under `<app-repo>/path/to/analytics/reporters`
 
 ## Default Analysis Definitions
 
@@ -73,7 +79,7 @@ DAU:
 
 ```text
 count(distinct device_id)
-where app_id = nextop DataFinder appId
+where app_id = the application's DataFinder appId
 group by local day
 ```
 
@@ -109,7 +115,7 @@ Define the denominator explicitly; do not mix all-app DAU with feature-specific 
 
 ## Validation Checklist
 
-- Confirm `app_id` matches current nextop defaults.
+- Confirm `app_id` matches current app defaults.
 - Confirm timezone, usually `Asia/Shanghai` unless the user requests another.
 - Compare event occurrence time with server ingestion time if the trend has sharp edges.
 - Count rows with missing `device_id`.

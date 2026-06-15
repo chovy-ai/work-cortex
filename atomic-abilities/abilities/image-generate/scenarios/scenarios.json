@@ -1,0 +1,52 @@
+{
+  "scenarios": [
+    {
+      "domain": "rnd",
+      "subtype": "architecture",
+      "title": "架构图",
+      "keywords": ["架构", "架构图", "architecture", "系统设计", "分层", "C4", "模块图", "拓扑"],
+      "method": "code",
+      "ref": "rnd/architecture.md"
+    },
+    {
+      "domain": "rnd",
+      "subtype": "flowchart",
+      "title": "流程图",
+      "keywords": ["流程", "流程图", "flowchart", "判定", "分支", "workflow"],
+      "method": "code",
+      "ref": "rnd/architecture.md"
+    },
+    {
+      "domain": "rnd",
+      "subtype": "sequence",
+      "title": "时序图",
+      "keywords": ["时序", "时序图", "sequence", "调用链", "交互时序"],
+      "method": "code",
+      "ref": "rnd/architecture.md"
+    },
+    {
+      "domain": "data-analysis",
+      "subtype": "chart",
+      "title": "数据分析图",
+      "keywords": ["图表", "折线", "柱状", "饼图", "散点", "趋势", "同环比", "分布", "chart", "可视化"],
+      "method": "code",
+      "ref": "data-analysis/chart.md"
+    },
+    {
+      "domain": "data-analysis",
+      "subtype": "table",
+      "title": "数据表格",
+      "keywords": ["表格", "数据表", "table", "明细", "对比表", "清单"],
+      "method": "code",
+      "ref": "data-analysis/table.md"
+    },
+    {
+      "domain": "product-analysis",
+      "subtype": "funnel",
+      "title": "漏斗图",
+      "keywords": ["漏斗", "转化", "funnel", "转化率"],
+      "method": "code",
+      "ref": "data-analysis/chart.md"
+    }
+  ]
+}

@@ -8,7 +8,7 @@ The Review Protocol applies exclusively to `query_path: raw_analysis` requests. 
 
 ### Purpose
 
-An independent review agent validates the QueryIntent before any plan is built. It must derive its judgment entirely from the QueryIntent, `capabilities.json`, and the nextop data model — it has no access to prior conversation history.
+An independent review agent validates the QueryIntent before any plan is built. It must derive its judgment entirely from the QueryIntent, `capabilities.json`, and the application data model — it has no access to prior conversation history.
 
 ### When to Run
 
@@ -33,7 +33,7 @@ Do not trigger for `needs_clarification` or `unsupported` intents.
 | `aggregation_logic` | Does the aggregation method (`count_distinct`, `count`, `sum`) match the business intent? e.g., "number of users" requires `count_distinct`, not `count`. |
 | `filter_safety` | Do filters correctly narrow to the intended population without accidentally excluding valid data or double-filtering? |
 | `breakdown_validity` | Are breakdown dimensions known DataFinder fields? If unknown, flag for metadata lookup before plan compilation. |
-| `known_risks` | Are there known data quality issues, ingestion delays, field ambiguities, or nextop SDK behaviors (e.g., nextopd stripping renderer params) that could affect result accuracy? |
+| `known_risks` | Are there known data quality issues, ingestion delays, field ambiguities, or application SDK behaviors (e.g., the reporter service stripping renderer params) that could affect result accuracy? |
 
 ### SubagentReviewResult Shape
 
@@ -46,7 +46,7 @@ Do not trigger for `needs_clarification` or `unsupported` intents.
     "aggregation_logic":  { "passed": true,  "notes": "" },
     "filter_safety":      { "passed": true,  "notes": "" },
     "breakdown_validity": { "passed": true,  "notes": "" },
-    "known_risks":        { "passed": false, "notes": "app_version is a nextopd-injected field; renderer-supplied app_version values are stripped. Breakdown result is reliable." }
+    "known_risks":        { "passed": false, "notes": "app_version is a reporter-service-injected field; renderer-supplied app_version values are stripped. Breakdown result is reliable." }
   },
   "revision_notes": [],
   "block_reason": null
@@ -161,22 +161,22 @@ If Stage 1 returns `requires_revision` more than **2 consecutive times** for the
 ```markdown
 ## 📊 查询方案确认
 
-**分析目标**：统计最近 14 天 nextop App 日活用户数（DAU），按 app_version 拆分
+**分析目标**：统计最近 14 天目标应用日活用户数（DAU），按 app_version 拆分
 
 **数据来源**：DataFinder OpenAPI — datafinder.openapi.analysis_query
 
 **计算公式**
 > DAU = count(distinct device_id)
 > 事件范围：全部事件（不限制）
-> 过滤条件：app_id = 20004134
+> 过滤条件：app_id = <your-app-id>
 > 拆分维度：app_version
 
 **时间范围**：2026-05-26 ～ 2026-06-08（Asia/Shanghai，按天聚合）
 
 **默认值说明**
-· app_id：使用默认值 20004134（来源：nextop defaults）
+· app_id：使用默认值 <your-app-id>（来源：应用默认值）
 · timezone：使用默认值 Asia/Shanghai（来源：skill default）
-· identity：使用默认值 device_id（来源：nextop DAU policy）
+· identity：使用默认值 device_id（来源：应用 DAU policy）
 
 **注意事项**
 ⚠ server_time 与 client_ts 在该时间段内存在最多 2 小时偏差，建议以 client_ts（local_time_ms）为准。

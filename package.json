@@ -9,6 +9,7 @@
     "test:tools": "npm run build:tools && node --test 'build/tests/*.test.js'"
   },
   "dependencies": {
+    "atomic-abilities": "file:./atomic-abilities",
     "kafkajs": "^2.2.4"
   },
   "optionalDependencies": {

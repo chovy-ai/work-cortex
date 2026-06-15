@@ -6,7 +6,7 @@
 
 - User natural language.
 - `domains/intent-routing/capabilities.json`.
-- nextop defaults from `domains/metric-semantics/data-model-protocol.md`.
+- Application defaults from `domains/metric-semantics/data-model-protocol.md`.
 - User-provided OpenAPI/Kafka/local-file configuration when available.
 
 ## Output Status
@@ -40,7 +40,7 @@ Matched or clarification output:
     "reason": "DAU trend is a computed aggregate metric supported by DataFinder analysis query."
   },
   "slots": {
-    "app_id": 20004134,
+    "app_id": "<your-app-id>",
     "metric": "dau",
     "time_range": "last_14_days",
     "timezone": "Asia/Shanghai",
@@ -52,8 +52,8 @@ Matched or clarification output:
   "defaults_applied": [
     {
       "slot": "app_id",
-      "value": 20004134,
-      "source": "nextop defaults"
+      "value": "<your-app-id>",
+      "source": "application defaults"
     }
   ],
   "warnings": []
@@ -80,8 +80,8 @@ Unsupported output:
 4. Pick `capability_id` only from the matched CapabilitySpec.
 5. Pick `template_id` only from the matched CapabilitySpec's `templates`.
 6. Extract slot keys only from the matched capability's `required_slots` and `optional_slots`.
-7. Fill documented nextop defaults only when the default is semantically safe:
-   - `app_id`: current nextop DataFinder app id from `domains/metric-semantics/data-model-protocol.md`.
+7. Fill documented application defaults only when the default is semantically safe:
+   - `app_id`: current application DataFinder app id from `domains/metric-semantics/data-model-protocol.md`.
    - `timezone`: `Asia/Shanghai` unless user specifies otherwise.
    - DAU identity: `device_id`.
    - DAU granularity: `day`.
@@ -97,7 +97,7 @@ Slots are capability-bound, not global free-form fields. Common slots:
 
 | Slot | Meaning | Notes |
 | --- | --- | --- |
-| `app_id` | DataFinder app id | Default to current nextop app id only for nextop analytics requests. |
+| `app_id` | DataFinder app id | Default to the current application app id only for application analytics requests. |
 | `metric` | Business metric | Examples: `dau`, `event_count`, `event_users`, `session_count`, `error_rate`. |
 | `time_range` | User-requested period | Preserve relative ranges; planner later resolves them to absolute dates. |
 | `timezone` | Date bucketing timezone | Default `Asia/Shanghai`. |
@@ -143,7 +143,7 @@ Input: "分析最近 14 天日活增长"
     "reason": "DAU growth is an aggregate metric trend supported by DataFinder analysis."
   },
   "slots": {
-    "app_id": 20004134,
+    "app_id": "<your-app-id>",
     "metric": "dau",
     "time_range": "last_14_days",
     "timezone": "Asia/Shanghai",
@@ -153,9 +153,9 @@ Input: "分析最近 14 天日活增长"
     "breakdowns": []
   },
   "defaults_applied": [
-    {"slot": "app_id", "value": 20004134, "source": "nextop defaults"},
+    {"slot": "app_id", "value": "<your-app-id>", "source": "application defaults"},
     {"slot": "timezone", "value": "Asia/Shanghai", "source": "skill default"},
-    {"slot": "identity", "value": "device_id", "source": "nextop DAU policy"}
+    {"slot": "identity", "value": "device_id", "source": "application DAU policy"}
   ],
   "warnings": []
 }
@@ -181,11 +181,11 @@ Input: "查一下这个 report_id 的数据：abc123"
     "reason": "The request references an existing DataFinder report asset."
   },
   "slots": {
-    "app_id": 20004134,
+    "app_id": "<your-app-id>",
     "report_id": "abc123"
   },
   "defaults_applied": [
-    {"slot": "app_id", "value": 20004134, "source": "nextop defaults"}
+    {"slot": "app_id", "value": "<your-app-id>", "source": "application defaults"}
   ],
   "warnings": []
 }
@@ -211,10 +211,10 @@ Input: "看一下这个用户最近做了什么"
     "reason": "Behavior flow requires a concrete user/device identifier and anchor timestamp."
   },
   "slots": {
-    "app_id": 20004134
+    "app_id": "<your-app-id>"
   },
   "defaults_applied": [
-    {"slot": "app_id", "value": 20004134, "source": "nextop defaults"}
+    {"slot": "app_id", "value": "<your-app-id>", "source": "application defaults"}
   ],
   "clarification_question": "请提供要查询的 user_unique_id、device_id、ssid 或 web_id，以及希望围绕哪个时间点查看行为流。",
   "warnings": []

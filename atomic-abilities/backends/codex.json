@@ -1,0 +1,9 @@
+{
+  "id": "codex",
+  "transport": "acp",
+  "cmd": "node_modules/.bin/codex-acp",
+  "args": [],
+  "cwd": ".",
+  "env_strip": [],
+  "permission": "allow_all"
+}

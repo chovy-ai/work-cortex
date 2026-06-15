@@ -1,0 +1,9 @@
+{
+  "id": "claude",
+  "transport": "acp",
+  "cmd": "node_modules/.bin/claude-code-acp",
+  "args": [],
+  "cwd": ".",
+  "env_strip": ["CLAUDECODE", "CLAUDE_CODE_ENTRYPOINT"],
+  "permission": "allow_all"
+}

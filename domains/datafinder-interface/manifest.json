@@ -195,7 +195,7 @@
       },
       "response": {
         "output": "metadata_records",
-        "notes": "Verified against the official 查询事件 metadata endpoint. NOTE: for nextop event discovery prefer the local source-derived event catalog."
+        "notes": "Verified against the official 查询事件 metadata endpoint. NOTE: for application event discovery prefer the local source-derived event catalog."
       },
       "limits": {},
       "use_when": "Confirming DataFinder-registered event/property schema; fallback event discovery."

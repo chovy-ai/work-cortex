@@ -1,13 +1,13 @@
 {
   "id": "event-knowledge",
-  "description": "nextop 事件目录（名称/参数/上报时机）",
-  "truth_source": "nextop 源码 github.com/nextop-os/nextop",
+  "description": "应用事件目录（名称/参数/上报时机）",
+  "truth_source": "应用源码（仓库见 app.config.json 的 app.repo）",
   "serves": [
     "knowledge-store/event-catalog.json"
   ],
   "update": {
     "type": "script",
-    "cmd": "bash domains/event-knowledge/sync_nextop.sh && node build/domains/event-knowledge/extract_events.js"
+    "cmd": "bash domains/event-knowledge/sync_app.sh && node build/domains/event-knowledge/extract_events.js"
   },
   "check": {
     "type": "script",

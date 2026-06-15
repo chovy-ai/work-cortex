@@ -1,15 +1,15 @@
 ---
-name: nextop-data-analytics
-description: Analyze nextop product analytics data from 火山引擎 DataFinder OpenAPI, DataFinder Kafka exports, CSV/NDJSON samples, or copied dashboard results. Use when users ask for nextop DAU/WAU/MAU, active growth, retention, funnel, feature usage, event debugging, user behavior flow, DataFinder OpenAPI selection, or analytics data interpretation.
+name: data-analytics
+description: Analyze application product analytics data from 火山引擎 DataFinder OpenAPI, DataFinder Kafka exports, CSV/NDJSON samples, or copied dashboard results. Use when users ask for application DAU/WAU/MAU, active growth, retention, funnel, feature usage, event debugging, user behavior flow, DataFinder OpenAPI selection, or analytics data interpretation.
 ---
 
-# Nextop Data Analytics
+# Data Analytics
 
 ## Workflow
 
 ### Phase 0 — Sync & Index (run once per session, or when event data feels stale)
 
-1. **Update nextop code**: Run `bash domains/event-knowledge/sync_nextop.sh` to pull the latest nextop monorepo. Skip if the user has confirmed the local copy is current.
+1. **Update application code**: Run `bash domains/event-knowledge/sync_app.sh` to pull the latest application monorepo. Skip if the user has confirmed the local copy is current.
 2. **Build event catalog**: Run `node build/domains/event-knowledge/extract_events.js` to regenerate (build first if missing: `npm run build:tools`) `knowledge-store/event-catalog.json`. The catalog contains every registered analytics event with its parameter names and the source files where the event fires (上报时机). Skip if the catalog already exists and the user has not requested a refresh.
 3. **Read the catalog**: Load `knowledge-store/event-catalog.json` into context. Each entry has:
    - `event_name` — the DataFinder event identifier (e.g. `agent.message_sent`)
@@ -50,7 +50,7 @@ Use when the user references an existing DataFinder dashboard, report, or saved 
 
 Use when the model must decide which events to include, how to define the metric, or what calculation logic to apply. Because the model makes semantic decisions, this path requires a two-stage review gate before execution.
 
-4B. Apply nextop-specific defaults from `domains/metric-semantics/data-model-protocol.md`.
+4B. Apply application-specific defaults from `domains/metric-semantics/data-model-protocol.md`.
 5B. Select the data path:
     - Use the DataFinder OpenAPI module (`domains/datafinder-interface/`) for event analysis DSL, user profiles, behavior flows, user list queries, tags, and export downloads. See "DataFinder OpenAPI module" below. Use `domains/datafinder-interface/openapi-routing.md` for higher-level routing rules.
     - Use Kafka or exported raw events when the request needs raw event reconstruction, custom identity logic, near-real-time streams, or fields unavailable from OpenAPI. Read `domains/query-execution/protocols/raw-analysis/datafinder-kafka-raw-events.md` first.
@@ -64,11 +64,11 @@ Use when the model must decide which events to include, how to define the metric
 
 ## Default Metric Policy
 
-- For DAU, default to `count(distinct device_id)` by local day for nextop app events.
-- Prefer event occurrence time (`client_ts` in nextop protocol, mapped into DataFinder event local time / `local_time_ms`) over ingestion time (`server_time`) unless diagnosing delivery delay.
-- Filter to the configured nextop DataFinder app before aggregating.
-- Treat nextopd-owned common params as authoritative: `device_id`, `session_id`, `app_version`, `os`.
-- Do not trust renderer-supplied params with the same names; nextopd strips those before forwarding and injects its own values.
+- For DAU, default to `count(distinct device_id)` by local day for the application's events.
+- Prefer event occurrence time (`client_ts` in application protocol, mapped into DataFinder event local time / `local_time_ms`) over ingestion time (`server_time`) unless diagnosing delivery delay.
+- Filter to the configured application DataFinder app before aggregating.
+- Treat reporter-service-owned common params as authoritative: `device_id`, `session_id`, `app_version`, `os`.
+- Do not trust renderer-supplied params with the same names; the reporter service strips those before forwarding and injects its own values.
 - Exclude no events by default. If the user asks for "meaningful active users", propose an event include/exclude list and explain the impact before applying it.
 
 ## DataFinder OpenAPI module
@@ -106,7 +106,7 @@ Required config usually includes:
 - DataFinder environment: SaaS cloud-native, SaaS non-cloud-native, BytePlus overseas, or private deployment (`DATAFINDER_ENVIRONMENT`)
 - base URL (`DATAFINDER_BASE_URL`) — see `manifest.json` `global.base_urls` for the per-environment value
 - AK/SK (`DATAFINDER_ACCESS_KEY` / `DATAFINDER_SECRET_KEY`)
-- nextop `app_id` (`DATAFINDER_APP_ID`) and `DATAFINDER_REGION`
+- application `app_id` (`DATAFINDER_APP_ID`) and `DATAFINDER_REGION`
 - optional project/tenant headers for CDP/tag APIs (`DATAFINDER_PROJECT_ID`)
 
 ## Output Rules

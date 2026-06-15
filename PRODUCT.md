@@ -1,4 +1,7 @@
-# service-gateway 产品与架构设计
+# WorkCortex（智核）· 产品与架构设计
+
+> **项目定名：WorkCortex（智核）** —— 团队的 AI 工作任务处理核心。用自然语言提需求，居中的智能中枢理解后调度各 agent 能力把活办成；数据分析（问数）是第一个能力，未来扩展到研发 / 办公等更多能力。
+> `service-gateway` 是 WorkCortex 的常驻进程脊柱（接入·调度·回流），不是产品全名。
 
 > 与 ARCHITECTURE.md 平级的权威文档。ARCHITECTURE.md 管「分析能力怎么长」，本文管「能力怎么交付给团队」。
 > 模块级设计沉淀在 [design/](design/README.md)，逐模块讨论定稿后按文档实现；本文只保留架构级结论。
@@ -7,7 +10,7 @@
 
 ## 一、产品定位
 
-**把本仓库的能力从「工程师本机的 Claude skill」升级为「全团队可用的服务」**：团队成员在飞书（未来可以是其他应用）里用自然语言提问，常驻进程 `service-gateway` 接收消息、分发给具体能力执行、把结论回到会话。
+**把本仓库的能力从「工程师本机的 Claude skill」升级为「全团队可用的服务」WorkCortex（智核）**：团队成员在飞书（未来可以是其他应用）里用自然语言提问，常驻进程 `service-gateway` 接收消息、分发给具体能力执行、把结论回到会话。
 
 三个本质特征：
 
@@ -165,7 +168,7 @@ gate 语义对所有连接器不变，变的只是呈现。飞书交互卡片是
 ```jsonc
 {
   "id": "data-analysis",
-  "description": "nextop 产品数据 / 日志分析（本仓库查询链路）",
+  "description": "应用产品数据 / 日志分析（本仓库查询链路）",
   "match": { "default": true },      // 单能力期全量路由；多能力后：命令前缀 → 关键词 → LLM 路由
   "runtime": {
     "type": "acp",                   // ACP 协议拉起 agent 跑 skill
@@ -287,7 +290,7 @@ service-gateway/                   # 独立 TS 包（Node ≥ 20，package.json 
 | 实现语言 | **全仓库 TypeScript**（2026-06-12 用户决定全量迁移，Python 已清零） | 工具经根目录 `npm run build:tools` 编译至 `build/`，以 `node build/domains/.../x.js` 调用；kafkajs / duckdb 懒加载替代 kafka-python / duckdb(pip)；迁移经逐字节输出回归验证 |
 | LLM 运行时 | **ACP（Agent Client Protocol）拉起 agent**，支持 claude code / codex 配置切换 | 「能力壳 ↔ agent」接缝采用开源标准契约，与三层架构哲学同构；复用现有 skill / domains 零迁移；纯确定性 dashboard path 留作 M2 成本优化 |
 | 飞书接入方式 | lark-cli `event +subscribe` WebSocket 长连接 | 无需公网 webhook；stdout NDJSON 管道直读（M0 不落盘）；自带单实例锁 |
-| 部署 | 先本机 launchd 跑通，验证价值后迁服务器 | `.env.local`、nextop 本地仓库、claude 环境都现成 |
+| 部署 | 先本机 launchd 跑通，验证价值后迁服务器 | `.env.local`、应用本地仓库、claude 环境都现成 |
 | 权限 | open_id 白名单起步 | raw_analysis 限白名单，dashboard 放宽 |
 
 ## 十一、路线图

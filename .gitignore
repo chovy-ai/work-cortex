@@ -1,4 +1,5 @@
 .env.local
+app.config.json
 *.local.env
 .DS_Store
 .claude/*.local.json
@@ -6,8 +7,6 @@ node_modules/
 build/
 knowledge-store/*
 !knowledge-store/.gitkeep
-!knowledge-store/event-catalog.json
-!knowledge-store/data-model.json
 outputs/*
 !outputs/.gitkeep
 service-gateway/node_modules/

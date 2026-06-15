@@ -1,6 +1,6 @@
 {
   "id": "data-analysis",
-  "description": "nextop 产品数据 / 日志分析（本仓库查询链路）",
+  "description": "产品数据 / 日志分析（本仓库查询链路）",
   "match": {
     "default": true
   },

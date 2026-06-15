@@ -137,7 +137,7 @@ Use precise URLs from `domains/datafinder-interface/openapi-routing.md` when ava
   "execution_kind": "kafka",
   "kafka": {
     "topic": "behavior_event",
-    "consumer_group": "nextop-analysis-adhoc",
+    "consumer_group": "app-analysis-adhoc",
     "connection_ref": "provided_by_user",
     "offset_policy": "latest",
     "sample_limit": 1000,

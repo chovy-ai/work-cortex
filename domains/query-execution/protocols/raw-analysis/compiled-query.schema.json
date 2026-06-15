@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://nextop.local/schemas/compiled-query.schema.json",
-  "title": "Nextop Data Analytics CompiledQuery",
+  "$id": "https://data-analysis.local/schemas/compiled-query.schema.json",
+  "title": "Data Analytics CompiledQuery",
   "type": "object",
   "required": [
     "status",

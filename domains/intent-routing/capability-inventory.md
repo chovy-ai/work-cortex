@@ -53,7 +53,7 @@ The protocol must be derived from CapabilitySpec:
 1. Load `capabilities.json`.
 2. Match user language only to registered `category` and `supported_intents`.
 3. Extract only slots listed in the chosen capability's required or optional slots.
-4. If required slots are missing, ask for them or apply documented nextop defaults.
+4. If required slots are missing, ask for them or apply documented application defaults.
 5. If no capability supports the request, return `unsupported` with registered fallback capabilities.
 6. Compile only through a registered template.
 

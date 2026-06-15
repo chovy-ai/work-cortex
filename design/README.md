@@ -24,6 +24,12 @@
 | 08 | gate 挂起恢复 | 08-gate-resume.md | 未开始 | M1 |
 | 09 | 身份与权限（principals） | 09-principals.md | 未开始 | M1 |
 
+## 能力层公共库（与 gateway 模块平级，非依赖序）
+
+| # | 模块 | 文档 | 状态 | 说明 |
+|---|---|---|---|---|
+| A1 | atomic-abilities（原子能力库） | [A1-atomic-abilities.md](A1-atomic-abilities.md) | 🚢 已实现（MVP，真实 agent 冒烟待跑） | 给上层提供带类型的原子能力方法（生图 / review…），每个能力内部绑定最合适的 agent（codex / claude，经 ACP）；不是 skill、不做编排 |
+
 ## 模块文档模板
 
 每份文档统一结构：

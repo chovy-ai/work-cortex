@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 /**
- * Extract nextop analytics event catalog from source code.
+ * Extract the target application's analytics event catalog from source code.
  *
- * Reads the nextop monorepo to produce a structured event catalog with:
+ * Reads the application monorepo to produce a structured event catalog with:
  *   - event_name   : DataFinder event identifier  (e.g. "agent.message_sent")
  *   - params       : list of camelCase param names from the TypeScript interface
  *   - trigger_files: files that instantiate / call this reporter (上报时机 context)
@@ -10,15 +10,15 @@
  * Output: knowledge-store/event-catalog.json
  *
  * Usage:
- *     node build/domains/event-knowledge/extract_events.js [--nextop-path PATH]
- *     NEXTOP_REPO_PATH=/path/to/nextop node build/domains/event-knowledge/extract_events.js
+ *     node build/domains/event-knowledge/extract_events.js [--app-path PATH]
+ *     APP_REPO_PATH=/path/to/appRepo node build/domains/event-knowledge/extract_events.js
  */
 
 import * as fs from "node:fs";
-import * as os from "node:os";
 import * as path from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { dataAnalysisRoot, loadAppConfig, resolveOutput, resolveTargetRepo } from "../app-config/config.js";
 
 /** Resolve a path to an absolute, symlink-free form (Python Path.resolve equivalent). */
 function resolvePath(p: string): string {
@@ -30,27 +30,15 @@ function resolvePath(p: string): string {
   }
 }
 
-/** Python Path.expanduser equivalent for "~" / "~/..." prefixes. */
-function expandUser(p: string): string {
-  if (p === "~" || p.startsWith("~/")) {
-    return path.join(os.homedir(), p.slice(1));
-  }
-  return p;
-}
 
 const HERE = resolvePath(path.dirname(fileURLToPath(import.meta.url)));
-// Compiled file lives at build/domains/event-knowledge/extract_events.js,
-// one level deeper than the .py original, so each candidate gains one "..".
-let REPO_ROOT = path.resolve(HERE, "..", "..", "..", "..");
-if (path.basename(REPO_ROOT) !== "data-analysis") {
-  REPO_ROOT = path.resolve(HERE, "..", "..", "..");
-}
-const NEXTOP_DEFAULT = resolvePath(path.join(path.dirname(REPO_ROOT), "nextop"));
-const OUTPUT_FILE = path.join(REPO_ROOT, "knowledge-store", "event-catalog.json");
+const REPO_ROOT = dataAnalysisRoot(HERE);
+const CONFIG = loadAppConfig(REPO_ROOT);
+const OUTPUT_FILE = resolveOutput(CONFIG.output.eventCatalog, REPO_ROOT);
 
-const TS_REPORTERS_RELPATH = "apps/desktop/src/renderer/src/features/analytics/reporters";
-const GO_EVENTS_RELPATH = "services/nextopd/service/reporter/events";
-const MAIN_ANALYTICS_RELPATH = "apps/desktop/src/main";
+const TS_REPORTERS_RELPATH = CONFIG.sources.events.tsReporters;
+const GO_EVENTS_RELPATH = CONFIG.sources.events.goEvents;
+const MAIN_ANALYTICS_RELPATH = CONFIG.sources.events.mainAnalytics;
 
 interface EventEntry {
   event_name: string;
@@ -60,15 +48,8 @@ interface EventEntry {
 
 // ── helpers ────────────────────────────────────────────────────────────────────
 
-function nextopRoot(override: string | null = null): string {
-  if (override) {
-    return resolvePath(expandUser(override));
-  }
-  const env = process.env["NEXTOP_REPO_PATH"];
-  if (env) {
-    return resolvePath(expandUser(env));
-  }
-  return NEXTOP_DEFAULT;
+function appRepoRoot(override: string | null = null): string {
+  return resolveTargetRepo(override, REPO_ROOT);
 }
 
 function gitCommit(repo: string): string {
@@ -105,14 +86,14 @@ function isTestFile(rel: string): boolean {
  * which is the difference between ~10 minutes and a few seconds on a large repo.
  */
 function buildSymbolIndex(
-  nextop: string,
+  appRepo: string,
   scopeDirs: string[],
   extensions: string[],
   pattern: string,
 ): Map<string, string[]> {
   const includeArgs = extensions.map((ext) => `--include=${ext}`);
   const dirs = scopeDirs
-    .map((d) => path.join(nextop, d))
+    .map((d) => path.join(appRepo, d))
     .filter((d) => fs.existsSync(d));
   if (dirs.length === 0) {
     return new Map();
@@ -136,7 +117,7 @@ function buildSymbolIndex(
     return new Map();
   }
 
-  const prefix = nextop + "/";
+  const prefix = appRepo + "/";
   for (const line of stdout.split("\n")) {
     // Split on the LAST ':' — paths contain no ':' on this platform,
     // so "<path>:<match>" splits cleanly.
@@ -193,16 +174,16 @@ function tsClassName(reporterFile: string): string | null {
   return m ? m[1]! : null;
 }
 
-function extractTsReporters(nextop: string): EventEntry[] {
-  const reportersDir = path.join(nextop, TS_REPORTERS_RELPATH);
+function extractTsReporters(appRepo: string): EventEntry[] {
+  const reportersDir = path.join(appRepo, TS_REPORTERS_RELPATH);
   if (!fs.existsSync(reportersDir)) {
     return [];
   }
 
   // ONE grep over apps+packages for every "...Reporter" symbol occurrence.
   const symbolIndex = buildSymbolIndex(
-    nextop,
-    ["apps", "packages"],
+    appRepo,
+    CONFIG.sources.events.scope.ts,
     ["*.ts", "*.tsx"],
     "\\b[A-Z][A-Za-z0-9]*Reporter\\b",
   );
@@ -281,8 +262,8 @@ function rglob(dir: string, basename: string): string[] {
   return results.sort();
 }
 
-function extractGoEvents(nextop: string): EventEntry[] {
-  const eventsDir = path.join(nextop, GO_EVENTS_RELPATH);
+function extractGoEvents(appRepo: string): EventEntry[] {
+  const eventsDir = path.join(appRepo, GO_EVENTS_RELPATH);
   if (!fs.existsSync(eventsDir)) {
     return [];
   }
@@ -294,8 +275,8 @@ function extractGoEvents(nextop: string): EventEntry[] {
   // avoiding the basename collisions (e.g. multiple "opened") that a bare
   // package-name grep would hit.
   const pathIndex = buildSymbolIndex(
-    nextop,
-    ["services", "packages", "apps"],
+    appRepo,
+    CONFIG.sources.events.scope.go,
     ["*.go"],
     "reporter/events/[a-zA-Z0-9_/]+",
   );
@@ -328,8 +309,8 @@ function extractGoEvents(nextop: string): EventEntry[] {
 
 // ── Main-process (Electron) event extraction ───────────────────────────────────
 
-function extractMainProcessEvents(nextop: string): EventEntry[] {
-  const mainDir = path.join(nextop, MAIN_ANALYTICS_RELPATH);
+function extractMainProcessEvents(appRepo: string): EventEntry[] {
+  const mainDir = path.join(appRepo, MAIN_ANALYTICS_RELPATH);
   if (!fs.existsSync(mainDir)) {
     return [];
   }
@@ -345,7 +326,7 @@ function extractMainProcessEvents(nextop: string): EventEntry[] {
       content.matchAll(/\bname:\s*["']([a-z][a-z0-9_.]+[a-z0-9])["']/g),
       (m) => m[1]!,
     );
-    const prefix = nextop + "/";
+    const prefix = appRepo + "/";
     const rel = analyticsFile.startsWith(prefix)
       ? analyticsFile.slice(prefix.length)
       : analyticsFile;
@@ -373,31 +354,31 @@ function isoNowUtc(): string {
   return micros === 0 ? `${base}+00:00` : `${base}.${pad(micros, 6)}+00:00`;
 }
 
-/** argparse equivalent for: --nextop-path PATH, -h/--help. */
-function parseArgs(argv: string[]): { nextopPath: string | null } {
+/** argparse equivalent for: --app-path PATH, -h/--help. */
+function parseArgs(argv: string[]): { appPath: string | null } {
   const prog = path.basename(process.argv[1] ?? "extract_events.js");
-  const usage = `usage: ${prog} [-h] [--nextop-path NEXTOP_PATH]`;
-  let nextopPath: string | null = null;
+  const usage = `usage: ${prog} [-h] [--app-path APP_PATH]`;
+  let appPath: string | null = null;
   const extras: string[] = [];
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i]!;
     if (arg === "-h" || arg === "--help") {
       console.log(
-        `${usage}\n\nExtract nextop analytics event catalog\n\noptional arguments:\n`
+        `${usage}\n\nExtract the application's analytics event catalog\n\noptional arguments:\n`
         + `  -h, --help            show this help message and exit\n`
-        + `  --nextop-path NEXTOP_PATH\n`
-        + `                        Override path to nextop monorepo root`,
+        + `  --app-path APP_PATH\n`
+        + `                        Override path to the application monorepo root`,
       );
       process.exit(0);
-    } else if (arg === "--nextop-path") {
+    } else if (arg === "--app-path") {
       if (i + 1 >= argv.length) {
         console.error(usage);
-        console.error(`${prog}: error: argument --nextop-path: expected one argument`);
+        console.error(`${prog}: error: argument --app-path: expected one argument`);
         process.exit(2);
       }
-      nextopPath = argv[++i]!;
-    } else if (arg.startsWith("--nextop-path=")) {
-      nextopPath = arg.slice("--nextop-path=".length);
+      appPath = argv[++i]!;
+    } else if (arg.startsWith("--app-path=")) {
+      appPath = arg.slice("--app-path=".length);
     } else {
       extras.push(arg);
     }
@@ -407,26 +388,26 @@ function parseArgs(argv: string[]): { nextopPath: string | null } {
     console.error(`${prog}: error: unrecognized arguments: ${extras.join(" ")}`);
     process.exit(2);
   }
-  return { nextopPath };
+  return { appPath };
 }
 
 function main(): void {
   const args = parseArgs(process.argv.slice(2));
 
-  const nextop = nextopRoot(args.nextopPath);
-  if (!fs.existsSync(nextop)) {
+  const appRepo = appRepoRoot(args.appPath);
+  if (!fs.existsSync(appRepo)) {
     console.error(
-      `ERROR: nextop repo not found at ${nextop}\n`
-      + `Run domains/event-knowledge/sync_nextop.sh first, or set NEXTOP_REPO_PATH.`,
+      `ERROR: application repo not found at ${appRepo}\n`
+      + `Run domains/event-knowledge/sync_app.sh first, or set APP_REPO_PATH.`,
     );
     process.exit(1);
   }
 
-  console.log(`Scanning: ${nextop}`);
+  console.log(`Scanning: ${appRepo}`);
 
-  const tsEvents = extractTsReporters(nextop);
-  const goEvents = extractGoEvents(nextop);
-  const mainEvents = extractMainProcessEvents(nextop);
+  const tsEvents = extractTsReporters(appRepo);
+  const goEvents = extractGoEvents(appRepo);
+  const mainEvents = extractMainProcessEvents(appRepo);
 
   // Merge all three sources by event_name. An event may surface in more than
   // one source (a TS reporter, a Go mirror, a main-process call site); union
@@ -475,8 +456,8 @@ function main(): void {
 
   const catalog = {
     generated_at: isoNowUtc(),
-    nextop_commit: gitCommit(nextop),
-    nextop_path: nextop,
+    source_commit: gitCommit(appRepo),
+    source_path: appRepo,
     total_events: allEvents.length,
     events: allEvents,
   };

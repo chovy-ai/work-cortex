@@ -124,7 +124,7 @@ export interface Workflow {
   [key: string]: any;
 }
 
-export type StepRunner = (ctx: Record<string, any>) => StepOutcome;
+export type StepRunner = (ctx: Record<string, any>) => StepOutcome | Promise<StepOutcome>;
 
 export class StepScheduler {
   workflow_path: string;
@@ -143,10 +143,12 @@ export class StepScheduler {
   }
 
   new_state(context: Record<string, any> | null = null, run_id: string | null = null): SchedulerState {
+    const rid = run_id ?? randomUUID().replaceAll("-", "");
     return new SchedulerState({
-      run_id: run_id ?? randomUUID().replaceAll("-", ""),
+      run_id: rid,
       current_step: this.workflow.start,
-      context: context ?? {},
+      // run_id 也放进 ctx，供步骤定位本次 run 的产物目录（如报告环节的图表落盘）
+      context: { run_id: rid, ...(context ?? {}) },
     });
   }
 
@@ -191,7 +193,7 @@ export class StepScheduler {
 
   private async _run_step(step_id: string, context: Record<string, any>): Promise<StepOutcome> {
     const runner = await this._load_runner(step_id);
-    const outcome = runner(context);
+    const outcome = await runner(context);
     if (!(outcome instanceof StepOutcome)) {
       throw new TypeError(`${step_id}.run(ctx) must return StepOutcome`);
     }

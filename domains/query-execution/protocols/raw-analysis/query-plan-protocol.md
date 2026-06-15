@@ -6,7 +6,7 @@
 
 - A `QueryIntent` with `status = matched`.
 - The matched `CapabilitySpec` from `domains/intent-routing/capabilities.json`.
-- nextop defaults from `domains/metric-semantics/data-model-protocol.md`.
+- Application defaults from `domains/metric-semantics/data-model-protocol.md`.
 - OpenAPI/Kafka/local-file configuration availability flags.
 - Current date/time for resolving relative time ranges.
 
@@ -90,7 +90,7 @@ Use exactly one status:
    - `event_count` -> `count(*)`
    - `event_users` -> `count_distinct(identity)`
    - `session_count` -> `count_distinct(session_id)`
-7. Preserve field names when user gives DataFinder/nextop field names. If a requested field is ambiguous, block with a required metadata lookup.
+7. Preserve field names when user gives DataFinder/application field names. If a requested field is ambiguous, block with a required metadata lookup.
 8. Add validation checks based on output type:
    - aggregate tables: app id, date coverage, empty result, identity null rate.
    - report data: report id and row limit.

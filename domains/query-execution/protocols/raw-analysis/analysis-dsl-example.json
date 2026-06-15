@@ -1,0 +1,382 @@
+{
+  "use_app_cloud_id": true,
+  "periods": [
+    {
+      "granularity": "day",
+      "type": "past_range",
+      "spans": [
+        {
+          "type": "past",
+          "past": {
+            "amount": 7,
+            "unit": "day"
+          }
+        },
+        {
+          "type": "past",
+          "past": {
+            "amount": 1,
+            "unit": "day"
+          }
+        }
+      ],
+      "timezone": "Asia/Shanghai",
+      "week_start": 1
+    },
+    {
+      "granularity": "all",
+      "type": "past_range",
+      "spans": [
+        {
+          "type": "past",
+          "past": {
+            "amount": 7,
+            "unit": "day"
+          }
+        },
+        {
+          "type": "past",
+          "past": {
+            "amount": 1,
+            "unit": "day"
+          }
+        }
+      ],
+      "timezone": "Asia/Shanghai",
+      "week_start": 1,
+      "align_unit": "day",
+      "skip_period": true
+    }
+  ],
+  "version": 3,
+  "content": {
+    "profile_groups_v2": [],
+    "profile_filters": [
+      {
+        "show_name": "全体用户",
+        "show_label": "1",
+        "expression": {
+          "logic": "and",
+          "expressions": [
+            {
+              "logic": "or",
+              "conditions": []
+            }
+          ]
+        }
+      }
+    ],
+    "orders": [],
+    "query_type": "event",
+    "queries": [
+      [
+        {
+          "indicator_show_name": "总次数（PV）",
+          "measure_info": {},
+          "event_indicator": "events",
+          "show_name": "页面访问",
+          "show_label": "A",
+          "event_name": "predefine_pageview",
+          "event_type": "origin",
+          "filters": [],
+          "groups_v2": [],
+          "extra": {},
+          "show_key": "8dfd197d-5439-4b22-a7c0-4497e84cd8de"
+        }
+      ],
+      [
+        {
+          "indicator_show_name": "总人数（UV）",
+          "measure_info": {},
+          "event_indicator": "event_users",
+          "show_name": "页面访问",
+          "show_label": "B",
+          "event_name": "predefine_pageview",
+          "event_type": "origin",
+          "filters": [],
+          "groups_v2": [],
+          "extra": {},
+          "show_key": "e9a0d453-4483-466a-b75d-b5a6b1f837fe"
+        }
+      ]
+    ],
+    "option": {
+      "chart_type": "line",
+      "use_sample_data": false,
+      "refresh_cache": false,
+      "fusion": false,
+      "insight": {},
+      "analysis_subject": {},
+      "is_pie": false,
+      "skip_period_restrict": false,
+      "ignored_by_au": true
+    },
+    "page": {
+      "limit": 5000,
+      "offset": 0
+    }
+  },
+  "option": {
+    "blend": {
+      "status": true,
+      "base": 0,
+      "base_period": true
+    },
+    "transpose": false,
+    "finder": {
+      "sort_rule": "conf_order"
+    }
+  },
+  "resources": [
+    {
+      "project_ids": [
+        2856871
+      ],
+      "subject_ids": [
+        121
+      ],
+      "app_ids": []
+    }
+  ],
+  "app_ids": [],
+  "show_option": {
+    "__version": "3.4.2",
+    "__uba_service_id": "event",
+    "period": {
+      "granularity": "day",
+      "weekStart": 1,
+      "beginTime": {
+        "timestamp": 1780329600,
+        "amount": 7,
+        "unit": "day",
+        "hour": 0,
+        "tab": 2
+      },
+      "endTime": {
+        "timestamp": 1780848000,
+        "amount": 2,
+        "unit": "day",
+        "hour": 23,
+        "tab": 3
+      },
+      "shortcut": "past_7_day"
+    },
+    "tableTotalType": "average",
+    "scene": "common",
+    "queryEvent": [
+      {
+        "uuid": "8dfd197d-5439-4b22-a7c0-4497e84cd8de",
+        "label": "A",
+        "autoName": "页面访问（总次数（PV））",
+        "event": {
+          "event_type": "origin",
+          "event_name": "predefine_pageview",
+          "show_name": "页面访问",
+          "event_id": 246380397,
+          "preset": true,
+          "support_indicators": [
+            "events",
+            "event_users",
+            "events_per_user",
+            "uv_per_au",
+            "pv_per_au",
+            "sum",
+            "avg",
+            "per_user",
+            "pct",
+            "pct_t_digest",
+            "sum_per_au",
+            "min",
+            "max",
+            "distinct",
+            "distinct_user_attr",
+            "count_past_day_7",
+            "uniq_past_day_7",
+            "count_past_day_30",
+            "uniq_past_day_30",
+            "count_cur_month",
+            "uniq_cur_month",
+            "rolling_count",
+            "rolling_uniq"
+          ],
+          "metric": {},
+          "sub_app_id": null
+        },
+        "indicator": {
+          "value": {
+            "indicator": {
+              "indicator_type": "events"
+            },
+            "label": "总次数（PV）"
+          }
+        }
+      },
+      {
+        "uuid": "e9a0d453-4483-466a-b75d-b5a6b1f837fe",
+        "label": "B",
+        "autoName": "页面访问（总人数（UV））",
+        "event": {
+          "event_type": "origin",
+          "event_name": "predefine_pageview",
+          "show_name": "页面访问",
+          "event_id": 246380397,
+          "preset": true,
+          "support_indicators": [
+            "events",
+            "event_users",
+            "events_per_user",
+            "uv_per_au",
+            "pv_per_au",
+            "sum",
+            "avg",
+            "per_user",
+            "pct",
+            "pct_t_digest",
+            "sum_per_au",
+            "min",
+            "max",
+            "distinct",
+            "distinct_user_attr",
+            "count_past_day_7",
+            "uniq_past_day_7",
+            "count_past_day_30",
+            "uniq_past_day_30",
+            "count_cur_month",
+            "uniq_cur_month",
+            "rolling_count",
+            "rolling_uniq"
+          ],
+          "metric": {},
+          "sub_app_id": null
+        },
+        "indicator": {
+          "value": {
+            "indicator": {
+              "indicator_type": "event_users"
+            },
+            "label": "总人数（UV）"
+          }
+        }
+      }
+    ],
+    "eventCompute": [],
+    "inlineCohort": [
+      {
+        "uuid": "2a63606c-9292-4315-851b-4ebd4cd66ed7",
+        "autoName": "全体用户",
+        "customName": "",
+        "conditions": {
+          "logic": "and",
+          "conditions": [
+            {
+              "uuid": "dacf51d6-4f86-4af6-8e91-44b8187c2ea2",
+              "logic": "or",
+              "conditions": [
+                {
+                  "uuid": "6bfa5f4e-6175-45f1-8273-fac734a048e2",
+                  "inlineCohortType": "event_property",
+                  "event_property": {
+                    "uuid": "49a9c108-997d-4271-af68-b74a79bcfc07",
+                    "filter": null,
+                    "operation": {
+                      "value": "=",
+                      "label": "="
+                    },
+                    "operationValues": []
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      }
+    ],
+    "attrsGroup": [],
+    "chartConfiguration": {
+      "resultSortOrder": "conf_order",
+      "barGroupping": true,
+      "pieChartIndicator": true,
+      "colorTheme": "default",
+      "yAxisConfig": {
+        "customMarkLine": [],
+        "customValueRange": {
+          "autoRange": true
+        },
+        "customValueFormat": {
+          "enabled": false,
+          "type": "default",
+          "useSeparators": true,
+          "numberDigit": 2,
+          "numberUnit": "K",
+          "percentDigit": 2,
+          "permilleDigit": 2
+        }
+      },
+      "leftYAxisConfig": {
+        "customMarkLine": [],
+        "customValueRange": {
+          "autoRange": true
+        },
+        "customValueFormat": {
+          "enabled": false,
+          "type": "default",
+          "useSeparators": true,
+          "numberDigit": 2,
+          "numberUnit": "K",
+          "percentDigit": 2,
+          "permilleDigit": 2
+        }
+      },
+      "rightYAxisConfig": {
+        "customMarkLine": [],
+        "customValueRange": {
+          "autoRange": true
+        },
+        "customValueFormat": {
+          "enabled": false,
+          "type": "default",
+          "useSeparators": true,
+          "numberDigit": 2,
+          "numberUnit": "K",
+          "percentDigit": 2,
+          "permilleDigit": 2
+        }
+      }
+    },
+    "useSampleData": 0,
+    "ignoredByAu": true,
+    "transposedTableOptions": {
+      "showDate": true,
+      "segmentationFilterAsDimension": true,
+      "displayMode": "flat"
+    },
+    "legendOptions": {
+      "isSelectAll": true
+    },
+    "frozenColumnIndex": -1,
+    "groupLimit": 200,
+    "queryAnalysisSubject": {
+      "label": "用户",
+      "value": "default---1",
+      "analysis_subject": null,
+      "app_id": -1,
+      "create_time": -1,
+      "id": -1,
+      "modify_time": -1,
+      "name": "default",
+      "status": 1,
+      "show_name": "用户",
+      "subject_type": -1,
+      "unit": ""
+    },
+    "chartType": "line",
+    "extra": {
+      "is_pie": false,
+      "show_table_percent": false,
+      "scene": "event_query",
+      "showIncreaseRate": false,
+      "query_trigger": "manual_query",
+      "joint_analysis": false
+    }
+  }
+}

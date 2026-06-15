@@ -1,0 +1,4 @@
+interface:
+  display_name: "Data Analytics"
+  short_description: "Analyze DataFinder analytics data."
+  default_prompt: "Analyze the application's analytics data. First identify the metric, DataFinder interface, app_id, time range, identity key, and validation checks; then query or compute the result with clear caveats."

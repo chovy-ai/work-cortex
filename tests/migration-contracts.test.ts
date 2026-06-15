@@ -36,7 +36,7 @@ test("test_domain_module_contracts_exist", async (t) => {
 
 test("test_target_files_exist_and_legacy_files_are_removed", async (t) => {
   const expected_files = [
-    "domains/event-knowledge/sync_nextop.sh",
+    "domains/event-knowledge/sync_app.sh",
     "domains/event-knowledge/extract_events.ts",
     "domains/datafinder-interface/client.ts",
     "domains/datafinder-interface/cli.ts",
@@ -57,8 +57,6 @@ test("test_target_files_exist_and_legacy_files_are_removed", async (t) => {
     "domains/knowledge-update/update_knowledge.ts",
     "domains/knowledge-update/check_freshness.ts",
     "domains/knowledge-update/check_capabilities_sync.ts",
-    "knowledge-store/event-catalog.json",
-    "knowledge-store/data-model.json",
     "knowledge-store/.gitkeep",
     "outputs/.gitkeep",
   ];
@@ -69,12 +67,12 @@ test("test_target_files_exist_and_legacy_files_are_removed", async (t) => {
   }
 
   const removed_paths = [
-    "skills/nextop-data-analytics/tools",
-    "skills/nextop-data-analytics/references",
-    "skills/nextop-data-analytics/tools/datafinder_client.py",
-    "skills/nextop-data-analytics/ARCHITECTURE.md",
-    "skills/nextop-data-analytics/DOMAIN-DESIGN.md",
-    "skills/nextop-data-analytics/EXECUTION-FLOW.md",
+    "skills/data-analytics/tools",
+    "skills/data-analytics/references",
+    "skills/data-analytics/tools/datafinder_client.py",
+    "skills/data-analytics/ARCHITECTURE.md",
+    "skills/data-analytics/DOMAIN-DESIGN.md",
+    "skills/data-analytics/EXECUTION-FLOW.md",
   ];
   for (const rel_path of removed_paths) {
     await t.test(`rel_path=${rel_path}`, () => {
@@ -85,9 +83,17 @@ test("test_target_files_exist_and_legacy_files_are_removed", async (t) => {
 
 test("test_event_extractor_uses_new_store_paths", () => {
   const source = readFileSync(path.join(ROOT, "domains/event-knowledge/extract_events.ts"), "utf-8");
-  assert.ok(source.includes('path.join(REPO_ROOT, "knowledge-store", "event-catalog.json")'));
+  // Output path is now config-driven via app.config.json (output.eventCatalog),
+  // resolved through the central loader instead of a hardcoded string.
+  assert.ok(source.includes("resolveOutput(CONFIG.output.eventCatalog"));
   assert.ok(!source.includes("SKILL_ROOT"));
-  assert.ok(!source.includes("nextop-event-catalog.json"));
+
+  // The configured output still lands under knowledge-store/ — the guarantee
+  // the original assertion was protecting. Read the committed template
+  // (app.config.json is gitignored / local-only).
+  const appConfig = load_json("app.config.example.json");
+  assert.equal(appConfig["output"]["eventCatalog"], "knowledge-store/event-catalog.json");
+  assert.equal(appConfig["output"]["dataModel"], "knowledge-store/data-model.json");
 });
 
 test("test_datafinder_manifest_is_verified_and_cli_lists_without_legacy_package", async (t) => {

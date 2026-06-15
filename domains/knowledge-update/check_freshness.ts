@@ -5,6 +5,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { dataAnalysisRoot, loadAppConfig, resolveOutput, resolveTargetRepo } from "../app-config/config.js";
 
 /** Resolve to an absolute, symlink-free path (Python Path.resolve equivalent). */
 function resolvePath(p: string): string {
@@ -15,10 +16,9 @@ function resolvePath(p: string): string {
   }
 }
 
-// Compiled file lives at build/domains/knowledge-update/check_freshness.js;
-// repo root is 3 levels above its directory (one more than the .py original).
-const ROOT = path.resolve(path.dirname(resolvePath(fileURLToPath(import.meta.url))), "..", "..", "..");
-const NEXTOP = path.join(path.dirname(ROOT), "nextop");
+const ROOT = dataAnalysisRoot(resolvePath(fileURLToPath(import.meta.url)));
+const CONFIG = loadAppConfig(ROOT);
+const APP_REPO = resolveTargetRepo(null, ROOT);
 const MAX_DOC_AGE_DAYS = 30;
 
 function loadJson(p: string): Record<string, any> {
@@ -105,19 +105,19 @@ function ageDays(value: string | null | undefined): number | null {
 }
 
 function checkEventKnowledge(): [string, string[]] {
-  const catalog = loadJson(path.join(ROOT, "knowledge-store", "event-catalog.json"));
-  const stored = String(catalog["nextop_commit"] ?? "");
-  const remote = originHead(NEXTOP);
+  const catalog = loadJson(resolveOutput(CONFIG.output.eventCatalog, ROOT));
+  const stored = String(catalog["source_commit"] ?? "");
+  const remote = originHead(APP_REPO);
   if (Object.keys(catalog).length === 0) {
     return ["stale", ["knowledge-store/event-catalog.json is missing"]];
   }
   if (remote && stored && !remote.startsWith(stored)) {
-    return ["stale", [`nextop_commit ${stored} != origin HEAD ${remote}`]];
+    return ["stale", [`source_commit ${stored} != origin HEAD ${remote}`]];
   }
   if (!remote) {
-    return ["unknown", ["could not read nextop origin HEAD"]];
+    return ["unknown", ["could not read app repo origin HEAD"]];
   }
-  return ["fresh", [`nextop_commit ${stored} matches origin HEAD ${remote}`]];
+  return ["fresh", [`source_commit ${stored} matches origin HEAD ${remote}`]];
 }
 
 function checkDatafinderInterface(): [string, string[]] {
@@ -144,9 +144,9 @@ function checkDatafinderInterface(): [string, string[]] {
 }
 
 function checkMetricSemantics(): [string, string[]] {
-  const model = loadJson(path.join(ROOT, "knowledge-store", "data-model.json"));
-  const stored = String(model["nextop_commit"] ?? "");
-  const remote = originHead(NEXTOP);
+  const model = loadJson(resolveOutput(CONFIG.output.dataModel, ROOT));
+  const stored = String(model["source_commit"] ?? "");
+  const remote = originHead(APP_REPO);
   if (Object.keys(model).length === 0) {
     return ["stale", ["knowledge-store/data-model.json is missing"]];
   }
@@ -154,12 +154,12 @@ function checkMetricSemantics(): [string, string[]] {
     return ["unknown", ["data-model.json is still a placeholder"]];
   }
   if (remote && stored && !remote.startsWith(stored)) {
-    return ["stale", [`nextop_commit ${stored} != origin HEAD ${remote}`]];
+    return ["stale", [`source_commit ${stored} != origin HEAD ${remote}`]];
   }
   if (!remote) {
-    return ["unknown", ["could not read nextop origin HEAD"]];
+    return ["unknown", ["could not read app repo origin HEAD"]];
   }
-  return ["fresh", [`nextop_commit ${stored} matches origin HEAD ${remote}`]];
+  return ["fresh", [`source_commit ${stored} matches origin HEAD ${remote}`]];
 }
 
 const CHECKS: Record<string, () => [string, string[]]> = {
