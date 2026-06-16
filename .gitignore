@@ -1,3 +1,4 @@
+# 凭据 / 本地配置（深度无关，任意层级匹配）
 .env.local
 app.config.json
 *.local.env
@@ -5,10 +6,14 @@ app.config.json
 .claude/*.local.json
 node_modules/
 build/
-knowledge-store/*
-!knowledge-store/.gitkeep
-outputs/*
-!outputs/.gitkeep
-service-gateway/node_modules/
-service-gateway/dist/
-service-gateway/config.json
+
+# 能力本体：知识存储与运行产物（接缝，gitignored）
+abilities/data-analysis/knowledge-store/*
+!abilities/data-analysis/knowledge-store/.gitkeep
+abilities/data-analysis/outputs/*
+!abilities/data-analysis/outputs/.gitkeep
+
+# 平台：service-gateway 本地构建/配置
+platform/service-gateway/node_modules/
+platform/service-gateway/dist/
+platform/service-gateway/config.json

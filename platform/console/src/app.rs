@@ -502,7 +502,7 @@ impl ConsoleApp {
         let x = inner.min.x + region.min.x;
         let y = inner.min.y + region.min.y;
         self.mark_seq += 1;
-        let dir = self.paths.repo_root.join("gw-marks");
+        let dir = self.paths.marks.clone();
         // 等 overlay 上屏后再抓
         std::thread::sleep(Duration::from_millis(60));
         match mark::capture_region(x, y, region.width(), region.height(), &dir, self.mark_seq) {

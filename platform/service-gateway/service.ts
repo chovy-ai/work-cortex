@@ -15,9 +15,11 @@ import { createAcpRunner } from "./capabilities/data-analysis/runner.js";
 
 const execFileP = promisify(execFile);
 
-// dist/service.js → 包根 → 仓库根
+// dist/service.js → 包根（platform/service-gateway）→ platform → 仓库根
 const sgRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const repoRoot = resolve(sgRoot, "..");
+const repoRoot = resolve(sgRoot, "..", "..");
+// 分析能力本体：agent 工作目录，outputs/ 与 knowledge-store/ 都在这里
+const abilityRoot = join(repoRoot, "abilities", "data-analysis");
 
 interface Config {
   runtime: { maxConcurrent: number; timeoutSec: number; graceSec: number };
@@ -71,13 +73,13 @@ async function preflight(cfg: Config, log: ReturnType<typeof createLogger>): Pro
 
   // outputs 可写
   try {
-    mkdirSync(join(repoRoot, "outputs"), { recursive: true });
+    mkdirSync(join(abilityRoot, "outputs"), { recursive: true });
   } catch (err) {
     fail(`outputs/ 不可写：${String(err)}`, "检查仓库目录权限");
   }
 
   // 知识库存在（M0 知识更新是手动前置）
-  if (!existsSync(join(repoRoot, "knowledge-store", "event-catalog.json"))) {
+  if (!existsSync(join(abilityRoot, "knowledge-store", "event-catalog.json"))) {
     fail(
       "knowledge-store/event-catalog.json 缺失",
       "先跑知识更新：domains/event-knowledge 的 sync + extract（见 ARCHITECTURE.md）",
@@ -118,7 +120,7 @@ async function preflight(cfg: Config, log: ReturnType<typeof createLogger>): Pro
 async function main(): Promise<void> {
   const cfg = loadConfig();
   const log = createLogger(cfg.log.level);
-  log("info", "service", "starting", { sgRoot, repoRoot, maxConcurrent: cfg.runtime.maxConcurrent });
+  log("info", "service", "starting", { sgRoot, repoRoot, abilityRoot, maxConcurrent: cfg.runtime.maxConcurrent });
 
   await preflight(cfg, log);
 
@@ -126,20 +128,24 @@ async function main(): Promise<void> {
   const queue = new EnvelopeQueue(cfg.queue, log);
   const sender = new LarkSender({ bin: cfg.lark.bin, log });
   const consoleSender = new ConsoleSender(log);
-  const rtCmd = cfg.capability.runtime.cmd.includes("/")
-    ? resolve(sgRoot, cfg.capability.runtime.cmd)
-    : cfg.capability.runtime.cmd;
+  // ACP 适配器 bin：cmd 含 "/" 时按相对路径解析。npm workspaces 会把依赖提升到仓库根，
+  // 独立安装则落在包内，故 sgRoot / repoRoot 两处候选取先命中者（都不存在时退回 sgRoot 解析以报错清晰）。
+  let rtCmd = cfg.capability.runtime.cmd;
+  if (rtCmd.includes("/")) {
+    const candidates = [resolve(sgRoot, rtCmd), resolve(repoRoot, rtCmd)];
+    rtCmd = candidates.find((p) => existsSync(p)) ?? candidates[0];
+  }
   const runner = createAcpRunner({
     cmd: rtCmd,
     args: cfg.capability.runtime.args,
-    cwd: repoRoot,
+    cwd: abilityRoot,
     log,
   });
   let sessions: Sessions;
   const runtime = new Runtime({
     maxConcurrent: cfg.runtime.maxConcurrent,
     graceSec: cfg.runtime.graceSec,
-    outputsDir: join(repoRoot, "outputs"),
+    outputsDir: join(abilityRoot, "outputs"),
     runner,
     onEvent: (ev) => sessions.handleEvent(ev),
     log,

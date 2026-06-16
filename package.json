@@ -1,22 +1,21 @@
 {
-  "name": "data-analysis-tools",
+  "name": "workcortex",
   "version": "0.1.0",
   "private": true,
-  "type": "module",
-  "engines": { "node": ">=20" },
+  "description": "WorkCortex（智核）monorepo —— platform 脊柱 · abilities 能力 · packages 共享库",
+  "workspaces": [
+    "packages/*",
+    "abilities/*",
+    "platform/service-gateway"
+  ],
   "scripts": {
-    "build:tools": "tsc -p tsconfig.tools.json",
-    "test:tools": "npm run build:tools && node --test 'build/tests/*.test.js'"
-  },
-  "dependencies": {
-    "atomic-abilities": "file:./atomic-abilities",
-    "kafkajs": "^2.2.4"
-  },
-  "optionalDependencies": {
-    "duckdb": "^1.1.0"
-  },
-  "devDependencies": {
-    "@types/node": "^20.14.0",
-    "typescript": "^5.5.0"
+    "build:atomic": "npm run build -w atomic-abilities",
+    "build:ability": "npm run build:tools -w data-analysis-tools",
+    "build:gateway": "npm run build -w service-gateway",
+    "build": "npm run build:atomic && npm run build:ability && npm run build:gateway",
+    "test:ability": "npm run test:tools -w data-analysis-tools",
+    "test:gateway": "npm run test -w service-gateway",
+    "test": "npm run test:ability && npm run test:gateway",
+    "start:gateway": "npm run start -w service-gateway"
   }
 }

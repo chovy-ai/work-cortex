@@ -1,9 +1,9 @@
 //! 从文件系统读取网关的运行轨迹与配置（只读）。
 //!
 //! 数据源（service-gateway 约定）：
-//!   outputs/<run_id>/task.json      —— 一次任务的输入与上下文
-//!   outputs/<run_id>/events.ndjson  —— 该任务的事件流（progress/result/error/...）
-//!   service-gateway/config.json     —— 运行配置（缺省时读 config.example.json）
+//!   abilities/data-analysis/outputs/<run_id>/task.json      —— 一次任务的输入与上下文
+//!   abilities/data-analysis/outputs/<run_id>/events.ndjson  —— 该任务的事件流（progress/result/error/...）
+//!   platform/service-gateway/config.json                    —— 运行配置（缺省时读 config.example.json）
 
 use chrono::{DateTime, Local, NaiveDateTime, TimeZone, Utc};
 use serde::Deserialize;
@@ -17,27 +17,33 @@ pub struct Paths {
     pub sg_dir: PathBuf,
     pub config: PathBuf,
     pub config_example: PathBuf,
+    pub marks: PathBuf,
     pub launchd_log: PathBuf,
 }
 
 impl Paths {
     pub fn discover() -> Self {
-        // 优先 SG_REPO 环境变量；否则以本 crate 的上级目录为仓库根。
+        // 本 crate 在 platform/console/。优先 SG_REPO 指向仓库根；
+        // 否则由 console 目录上溯两级（platform/console → platform → 仓库根）。
+        let console_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         let repo_root = std::env::var("SG_REPO")
             .map(PathBuf::from)
             .unwrap_or_else(|_| {
-                PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                console_dir
                     .parent()
+                    .and_then(Path::parent)
                     .map(Path::to_path_buf)
                     .unwrap_or_else(|| PathBuf::from("."))
             });
         let home = std::env::var("HOME").unwrap_or_default();
-        let sg_dir = repo_root.join("service-gateway");
+        let sg_dir = repo_root.join("platform").join("service-gateway");
         Paths {
-            outputs: repo_root.join("outputs"),
+            outputs: repo_root.join("abilities").join("data-analysis").join("outputs"),
             config: sg_dir.join("config.json"),
             config_example: sg_dir.join("config.example.json"),
             sg_dir,
+            // 标注截图存 console 本地（被 console 的 .gitignore /gw-marks 忽略），不回写仓库根
+            marks: console_dir.join("gw-marks"),
             launchd_log: PathBuf::from(home).join("Library/Logs/service-gateway/out.log"),
             repo_root,
         }

@@ -14,5 +14,5 @@
     "sourceMap": false
   },
   "include": ["domains/**/*.ts", "tests/**/*.ts"],
-  "exclude": ["node_modules", "build", "service-gateway", "outputs"]
+  "exclude": ["node_modules", "build", "outputs"]
 }
