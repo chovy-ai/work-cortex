@@ -13,6 +13,7 @@ export interface RunRecord {
   created_at: string;
   lastProgressSentAt: number; // 进度外发节流（ms epoch）
   receiptHandle: Promise<string | null> | null; // 「工作中」reaction 句柄（回复前撤掉）
+  receiptPosted: boolean; // 是否已贴回执——真正开跑（首个 progress）才贴，排队/等槽期间不贴
   progressHandle: Promise<string | null> | null; // 进度消息句柄：首条发出后原地更新，长任务只占一条气泡
   awaitOptions?: string[]; // 挂起时 ask 给出的选项（["确认","修改","取消"] 或 []），用于解释用户回复
 }
@@ -53,7 +54,7 @@ export class Sessions {
   private activeByConv = new Map<string, string>(); // convKey → run_id
   private runConv = new Map<string, string>(); // run_id → convKey
   // 排队项带上回执句柄：排队时已贴的「工作中」reaction 在真正开跑时沿用，不重复贴
-  private pending = new Map<string, { env: Envelope; receipt: Promise<string | null> | null }[]>();
+  private pending = new Map<string, { env: Envelope }[]>();
   private overflowed = new Set<string>(); // 已就溢出提示过的会话（成功入队后重置，每轮只提示一次）
   private terminalOrder: string[] = [];
 
@@ -139,9 +140,8 @@ export class Sessions {
         return;
       }
       this.overflowed.delete(key);
-      // 排队也回执：贴「工作中」reaction，别让用户以为追问被无视；句柄随排队项带到开跑时沿用
-      const receipt = this.establishReceipt(env.channel, env.conversation, true);
-      q.push({ env, receipt });
+      // 排队时不贴表情（用户定：真正开跑才贴）；轮到它 startRun 后由首个 progress 触发回执。
+      q.push({ env });
       this.pending.set(key, q);
       log("info", "sessions", "queued behind running run", { conv: key, depth: q.length });
       return;
@@ -158,6 +158,11 @@ export class Sessions {
     }
     switch (ev.kind) {
       case "progress": {
+        // 真正开跑：首个 progress 才贴「工作中」回执（💪）——排队/等并发槽期间不贴。
+        if (!rec.receiptPosted) {
+          rec.receiptPosted = true;
+          rec.receiptHandle = this.establishReceipt(rec.channel, rec.conversation, false);
+        }
         // 节流外发执行进度（runtime 已落 events.ndjson，这里只管用户可见性）
         const sender = this.senderFor(rec);
         const canUpdate = !!(sender.sendProgress && sender.updateProgress);
@@ -237,7 +242,7 @@ export class Sessions {
     return this.activeByConv.size;
   }
 
-  private startRun(key: string, env: Envelope, existingReceipt?: Promise<string | null> | null): void {
+  private startRun(key: string, env: Envelope): void {
     const runId = newRunId();
     const task: Task = {
       v: 1,
@@ -262,14 +267,14 @@ export class Sessions {
       created_at: new Date().toISOString(),
       lastProgressSentAt: 0, // 回执是 reaction（非气泡），首条进度可立即发，不必再等一个节流窗口
       receiptHandle: null,
+      receiptPosted: false,
       progressHandle: null,
     };
     this.runs.set(runId, rec);
     this.activeByConv.set(key, runId);
     this.runConv.set(runId, key);
     this.opts.log("info", "sessions", "run started", { run_id: runId, conv: key });
-    // 回执：排队期已贴过 reaction 的沿用同一句柄（不重复贴）；否则现贴「工作中」reaction（💪）
-    rec.receiptHandle = existingReceipt !== undefined ? existingReceipt : this.establishReceipt(env.channel, env.conversation, false);
+    // 回执（💪）不在此处贴——真正开跑（runtime 给槽、runner 发首个 progress）时才贴，见 handleEvent。
     this.opts.submit(task);
   }
 
@@ -282,6 +287,7 @@ export class Sessions {
     rec.awaitOptions = undefined;
     rec.lastProgressSentAt = 0;
     rec.progressHandle = null;
+    rec.receiptPosted = false;
     const task: Task = {
       v: 1,
       run_id: rec.run_id,
@@ -297,8 +303,7 @@ export class Sessions {
     };
     assertValid("task", task);
     this.opts.log("info", "sessions", "run resumed", { run_id: rec.run_id, action_id });
-    // 重新贴「工作中」回执（旧句柄已在发问时撤掉）
-    rec.receiptHandle = this.establishReceipt(rec.channel, rec.conversation, false);
+    // 回执延迟到首个 progress（见 handleEvent）。
     this.opts.submit(task);
   }
 
@@ -313,7 +318,7 @@ export class Sessions {
     const q = this.pending.get(key);
     const next = q?.shift();
     if (q && q.length === 0) this.pending.delete(key);
-    if (next) this.startRun(key, next.env, next.receipt);
+    if (next) this.startRun(key, next.env);
   }
 
   private deliver(rec: RunRecord, send: (s: ConnectorPort) => Promise<void>): void {

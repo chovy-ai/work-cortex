@@ -59,8 +59,8 @@ function harness(pendingLimit = 10) {
 
 const tick = () => new Promise((r) => setImmediate(r));
 
-test("receipt reaction lifecycle: 💪 on start, removed before reply; text fallback without react", async () => {
-  // 带 react/unreact 的 sender：开跑贴表情 → 回复前撤掉 → 再发结果（顺序断言）
+test("receipt reaction lifecycle: 💪 only when processing starts (first progress), removed before reply", async () => {
+  // 带 react/unreact 的 sender：收到不贴 → 首个 progress 才贴 → 回复前撤掉 → 再发结果
   const order: string[] = [];
   const submitted: Task[] = [];
   const sender = {
@@ -84,19 +84,25 @@ test("receipt reaction lifecycle: 💪 on start, removed before reply; text fall
   });
   s1.handleEnvelope(env("r1"));
   await tick();
-  s1.handleEvent({
-    v: 1, run_id: submitted[0].run_id, seq: 1, at: new Date().toISOString(),
-    kind: "result", summary: "答案", tables: [], charts: [],
-  });
+  assert.equal(order.length, 0, "收到时不贴表情");
+  // 真正开跑：首个 progress → 贴表情
+  s1.handleEvent({ v: 1, run_id: submitted[0].run_id, seq: 0, at: new Date().toISOString(), kind: "progress", status: "正在分析…" });
+  await tick();
+  assert.ok(order.some((o) => o === `react:${RECEIPT_REACTION}`), "首个 progress 才贴表情");
+  // 结果：撤表情 → 再发结果（撤在回复之前）
+  s1.handleEvent({ v: 1, run_id: submitted[0].run_id, seq: 1, at: new Date().toISOString(), kind: "result", summary: "答案", tables: [], charts: [] });
   await tick();
   await tick();
-  assert.deepEqual(order, [`react:${RECEIPT_REACTION}`, "unreact:rid_1", "result"]);
+  assert.deepEqual(order.slice(-2), ["unreact:rid_1", "result"]);
 
-  // 不带 react 的 sender（harness 默认）：降级文本回执
+  // 不带 react 的 sender（harness 默认）：降级文本回执也延迟到首个 progress
   const h = harness();
   h.sessions.handleEnvelope(env("r2"));
   await tick();
-  assert.equal(h.sent.filter((m) => m.body.startsWith(RECEIPT_TEXT)).length, 1);
+  assert.equal(h.sent.filter((m) => m.body.startsWith(RECEIPT_TEXT)).length, 0, "收到时无文本回执");
+  h.sessions.handleEvent({ v: 1, run_id: h.submitted[0].run_id, seq: 0, at: new Date().toISOString(), kind: "progress", status: "正在分析…" });
+  await tick();
+  assert.equal(h.sent.filter((m) => m.body.startsWith(RECEIPT_TEXT)).length, 1, "首个 progress 发文本回执");
 });
 
 test("p2p message starts run; valid Task submitted", () => {
@@ -253,7 +259,7 @@ test("progress on update-capable channel: first sends a new message, rest update
   assert.equal(calls[2].arg, `${PROGRESS_PREFIX}汇总结论`);
 });
 
-test("queued follow-up is acknowledged (reaction), not silently swallowed", async () => {
+test("follow-up queues, then is reacted only when its turn starts processing (not while queued)", async () => {
   const reacted: string[] = [];
   const submitted: Task[] = [];
   const sender = {
@@ -269,14 +275,23 @@ test("queued follow-up is acknowledged (reaction), not silently swallowed", asyn
     capabilityId: "data-analysis", timeoutSec: 600, pendingLimit: 10, terminalKeep: 512,
     submit: (t) => submitted.push(t), sender, log: silentLogger,
   });
-  s.handleEnvelope(env("q1")); // 开跑 → 贴 reaction
-  s.handleEnvelope(env("q2")); // 排队 → 也贴 reaction（acknowledged）
+  s.handleEnvelope(env("q1")); // 开跑
+  s.handleEnvelope(env("q2")); // 排队
   await tick();
-  assert.deepEqual(reacted, [`om_q1:${RECEIPT_REACTION}`, `om_q2:${RECEIPT_REACTION}`]);
-  // 排队项开跑时沿用排队期的句柄，不重复贴
+  assert.equal(submitted.length, 1, "仅 q1 开跑，q2 排队");
+  assert.deepEqual(reacted, [], "排队/等槽期间不贴表情");
+  // q1 真正开始处理 → 贴 q1 表情
+  s.handleEvent({ v: 1, run_id: submitted[0].run_id, seq: 0, at: new Date().toISOString(), kind: "progress", status: "x" });
+  await tick();
+  assert.deepEqual(reacted, [`om_q1:${RECEIPT_REACTION}`]);
+  // q1 完成 → q2 出队开跑
   s.handleEvent({ v: 1, run_id: submitted[0].run_id, seq: 1, at: new Date().toISOString(), kind: "result", summary: "答案", tables: [], charts: [] });
   await tick();
-  assert.equal(reacted.filter((r) => r.startsWith("om_q2")).length, 1);
+  assert.equal(submitted.length, 2, "q2 接着开跑，未被吞");
+  // q2 开始处理 → 贴 q2 表情
+  s.handleEvent({ v: 1, run_id: submitted[1].run_id, seq: 0, at: new Date().toISOString(), kind: "progress", status: "x" });
+  await tick();
+  assert.deepEqual(reacted, [`om_q1:${RECEIPT_REACTION}`, `om_q2:${RECEIPT_REACTION}`], "各自开跑时才贴，q2 未被吞");
 });
 
 test("pending overflow notifies the user once per episode", async () => {

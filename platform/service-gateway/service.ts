@@ -12,6 +12,7 @@ import { LarkSender } from "./connectors/lark/sender.js";
 import { ConsoleSender } from "./connectors/console/sender.js";
 import { startConsoleHttp, type ConsoleHttpHandle } from "./connectors/console/http.js";
 import { createSkillRunner } from "./capabilities/data-analysis/runner.js";
+import { SessionStore } from "./capabilities/data-analysis/session-store.js";
 
 const execFileP = promisify(execFile);
 
@@ -32,7 +33,7 @@ interface Config {
 }
 
 const DEFAULTS: Config = {
-  runtime: { maxConcurrent: 1, timeoutSec: 600, graceSec: 10 },
+  runtime: { maxConcurrent: 5, timeoutSec: 600, graceSec: 10 },
   queue: { maxSize: 1000, dedupCapacity: 4096 },
   sessions: { pendingPerConversation: 10, terminalKeep: 512 },
   capability: { id: "data-analysis" },
@@ -121,9 +122,10 @@ async function main(): Promise<void> {
   const queue = new EnvelopeQueue(cfg.queue, log);
   const sender = new LarkSender({ bin: cfg.lark.bin, log });
   const consoleSender = new ConsoleSender(log);
-  // 数据分析能力：skill 驱动 —— 拉 ACP agent 读 data-analytics SKILL，在能力工作目录用
-  // datafinder cli 自取数据并产出结论（看板复用 / 自由分析）。
-  const runner = createSkillRunner({ abilityRoot, abilityRelCwd: "abilities/data-analysis", log });
+  // 数据分析能力：skill 驱动 —— 每条消息拉一次性 ACP agent 读 data-analytics SKILL + 本会话历史，
+  // 在能力工作目录用 datafinder cli 自取数据并产出结论。会话历史按 convKey 聚合提供上下文。
+  const sessionStore = new SessionStore({ maxTurns: 8, maxSessions: 200, idleMs: 30 * 60_000 });
+  const runner = createSkillRunner({ abilityRoot, abilityRelCwd: "abilities/data-analysis", sessions: sessionStore, log });
   let sessions: Sessions;
   const runtime = new Runtime({
     maxConcurrent: cfg.runtime.maxConcurrent,

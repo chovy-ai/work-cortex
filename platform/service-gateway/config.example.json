@@ -1,6 +1,6 @@
 {
   "runtime": {
-    "maxConcurrent": 1,
+    "maxConcurrent": 5,
     "timeoutSec": 600,
     "graceSec": 10
   },
