@@ -14,6 +14,19 @@ const envPath = process.argv[2] ?? resolve(PKG_ROOT, "..", "..", "abilities", "d
 const reportId = process.argv[3] ?? "7649241423115461888";
 
 const q = createAnalyticsQuery(createDataFinderSDK(loadConfigFromEnv(envPath)));
+
+// 增量 1：报表索引
+const reports = await q.listReports();
+if (reports.length === 0) {
+  process.stderr.write("FAIL: listReports 返回空\n");
+  process.exit(1);
+}
+process.stdout.write(`listReports OK: ${reports.length} 个报表\n`);
+for (const r of reports.slice(0, 8)) {
+  process.stdout.write(`  ${r.report_id}  ${r.report_name}  (看板: ${r.dashboard_name})\n`);
+}
+
+// 增量 0：报表回填
 const r = await q.queryReport(reportId, { count: 7 });
 
 if (!r.ok) {

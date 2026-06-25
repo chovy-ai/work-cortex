@@ -9,4 +9,4 @@
  *   const r = await q.queryReport("7649241423115461888", { count: 7 });
  */
 export { AnalyticsQuery, createAnalyticsQuery } from "./src/engine.js";
-export type { QueryResult, QueryTable } from "./src/types.js";
+export type { QueryResult, QueryTable, ReportRef } from "./src/types.js";
