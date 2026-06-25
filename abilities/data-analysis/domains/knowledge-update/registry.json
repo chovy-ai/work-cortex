@@ -1,13 +1,6 @@
 {
   "modules": [
     {
-      "id": "datafinder-interface",
-      "path": "domains/datafinder-interface/module.json",
-      "serves": [
-        "../../packages/datafinder-sdk/manifest.json"
-      ]
-    },
-    {
       "id": "event-knowledge",
       "path": "domains/event-knowledge/module.json",
       "serves": [

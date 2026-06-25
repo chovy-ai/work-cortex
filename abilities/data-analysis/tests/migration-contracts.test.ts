@@ -19,7 +19,6 @@ function load_json(rel_path: string): Record<string, any> {
 test("test_domain_module_contracts_exist", async (t) => {
   const modules: Record<string, string> = {
     "domains/event-knowledge/module.json": "event-knowledge",
-    "domains/datafinder-interface/module.json": "datafinder-interface",
     "domains/metric-semantics/module.json": "metric-semantics",
   };
 
@@ -39,9 +38,6 @@ test("test_target_files_exist_and_legacy_files_are_removed", async (t) => {
     "domains/event-knowledge/sync_app.sh",
     "domains/event-knowledge/extract_events.ts",
     "domains/datafinder-interface/cli.ts",
-    "domains/datafinder-interface/UPDATE.md",
-    "domains/datafinder-interface/README.md",
-    "domains/datafinder-interface/openapi-routing.md",
     "domains/metric-semantics/data-model-protocol.md",
     "domains/metric-semantics/extract_data_model.ts",
     "domains/intent-routing/capabilities.json",

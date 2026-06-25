@@ -13,6 +13,7 @@
  */
 export { DataFinderSDK, createDataFinderSDK } from "./src/sdk.js";
 export { type DfResult } from "./src/errors.js";
+export { checkFreshness, type FreshnessReport } from "./src/freshness.js";
 export { normalizeOpenApiData, genericResult } from "./src/normalize.js";
 export {
   DataFinderClient,

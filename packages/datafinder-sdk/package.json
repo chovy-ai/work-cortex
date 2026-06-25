@@ -12,11 +12,12 @@
       "default": "./dist/index.js"
     }
   },
-  "files": ["dist", "manifest.json", "README.md"],
+  "files": ["dist", "manifest.json", "README.md", "UPDATE.md", "openapi-routing.md"],
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "gen:readme": "npm run build && node dist/scripts/gen-readme.js"
+    "gen:readme": "npm run build && node dist/scripts/gen-readme.js",
+    "check:freshness": "npm run build && node dist/scripts/check-freshness.js"
   },
   "engines": { "node": ">=20" },
   "devDependencies": {

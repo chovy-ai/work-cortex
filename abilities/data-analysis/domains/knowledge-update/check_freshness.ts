@@ -120,29 +120,8 @@ function checkEventKnowledge(): [string, string[]] {
   return ["fresh", [`source_commit ${stored} matches origin HEAD ${remote}`]];
 }
 
-function checkDatafinderInterface(): [string, string[]] {
-  // manifest 已抽离到独立包 @workcortex/datafinder-sdk（单一真源）。
-  const manifest = loadJson(path.join(ROOT, "..", "..", "packages", "datafinder-sdk", "manifest.json"));
-  if (Object.keys(manifest).length === 0) {
-    return ["stale", ["manifest.json is missing"]];
-  }
-  const endpoints: Record<string, any>[] = manifest["endpoints"] ?? [];
-  const unverified = endpoints.filter((ep) => !ep["path_verified"]).map((ep) => ep["id"]);
-  const age = ageDays(manifest["last_verified_against_docs_at"]);
-  const messages: string[] = [];
-  if (unverified.length > 0) {
-    messages.push(`${unverified.length} endpoints path_verified=false: ${unverified.join(", ")}`);
-  }
-  if (age === null) {
-    messages.push("last_verified_against_docs_at is missing or invalid");
-  } else if (age > MAX_DOC_AGE_DAYS) {
-    messages.push(`last_verified_against_docs_at is ${age} days old`);
-  }
-  if (messages.length > 0) {
-    return ["stale", messages];
-  }
-  return ["fresh", [`${endpoints.length} endpoints verified`]];
-}
+// DataFinder 接口知识已抽离到独立包 @workcortex/datafinder-sdk，其新鲜度由包自检
+// （`npm run check:freshness -w @workcortex/datafinder-sdk`），不再属于 ability 的知识机制。
 
 function checkMetricSemantics(): [string, string[]] {
   const model = loadJson(resolveOutput(CONFIG.output.dataModel, ROOT));
@@ -165,14 +144,13 @@ function checkMetricSemantics(): [string, string[]] {
 
 const CHECKS: Record<string, () => [string, string[]]> = {
   "event-knowledge": checkEventKnowledge,
-  "datafinder-interface": checkDatafinderInterface,
   "metric-semantics": checkMetricSemantics,
 };
 
 function main(argv: string[] | null = null): number {
   const args = argv !== null ? argv : process.argv.slice(2);
   if (args.length !== 1 || !(args[0]! in CHECKS)) {
-    console.error("usage: check_freshness.js <event-knowledge|datafinder-interface|metric-semantics>");
+    console.error("usage: check_freshness.js <event-knowledge|metric-semantics>");
     return 2;
   }
   const [status, messages] = CHECKS[args[0]!]!();
