@@ -5,8 +5,6 @@ import * as path from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 
-import { SchedulerState, StepOutcome } from "../domains/query-execution/scheduler/scheduler.js";
-
 // Compiled location: build/tests/migration-contracts.test.js — the repo root
 // is two levels up from this file.
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -44,10 +42,6 @@ test("test_target_files_exist_and_legacy_files_are_removed", async (t) => {
     "domains/intent-routing/capability-inventory.md",
     "domains/intent-routing/query-intent-protocol.md",
     "domains/intent-routing/query-intent.schema.json",
-    "domains/query-execution/executors/kafka_executor.ts",
-    "domains/query-execution/executors/local_executor.ts",
-    "domains/query-execution/scheduler/workflow.json",
-    "domains/query-execution/scheduler/scheduler.ts",
     "domains/knowledge-update/update_knowledge.ts",
     "domains/knowledge-update/check_freshness.ts",
     "domains/knowledge-update/check_capabilities_sync.ts",
@@ -182,12 +176,3 @@ test("test_capabilities_are_in_sync_with_manifest", () => {
   assert.ok(result.stdout.includes("capabilities sync: ok"));
 });
 
-test("test_scheduler_persists_awaiting_state", () => {
-  const ctx: Record<string, any> = { run_id: "contract-test", query_path: "raw_analysis" };
-  const outcome = StepOutcome.await_input("user_review", { review_card: "confirm" });
-  assert.equal(outcome.status, "await_input");
-  const state = new SchedulerState({ run_id: ctx["run_id"], current_step: "user_review", context: ctx });
-  state.apply(outcome);
-  assert.equal(state.status, "awaiting_input");
-  assert.equal(state.awaiting_step, "user_review");
-});

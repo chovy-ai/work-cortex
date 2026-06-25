@@ -11,7 +11,7 @@ import { startLarkListener } from "./connectors/lark/listener.js";
 import { LarkSender } from "./connectors/lark/sender.js";
 import { ConsoleSender } from "./connectors/console/sender.js";
 import { startConsoleHttp, type ConsoleHttpHandle } from "./connectors/console/http.js";
-import { createSchedulerRunner } from "./capabilities/data-analysis/runner.js";
+import type { RunnerFn } from "./core/contracts.js";
 
 const execFileP = promisify(execFile);
 
@@ -76,19 +76,8 @@ async function preflight(cfg: Config, log: ReturnType<typeof createLogger>): Pro
   } catch (err) {
     fail(`outputs/ 不可写：${String(err)}`, "检查仓库目录权限");
   }
-
-  // 分析引擎已编译（runner 进程内 import build 产物）
-  if (!existsSync(join(abilityRoot, "build", "domains", "query-execution", "scheduler", "scheduler.js"))) {
-    fail("分析引擎未编译（build/ 缺失）", "在仓库根运行 npm run build:ability");
-  }
-
-  // 知识库存在（M0 知识更新是手动前置）
-  if (!existsSync(join(abilityRoot, "knowledge-store", "event-catalog.json"))) {
-    fail(
-      "knowledge-store/event-catalog.json 缺失",
-      "先跑知识更新：domains/event-knowledge 的 sync + extract（见 ARCHITECTURE.md）",
-    );
-  }
+  // 注：旧数据分析链路（query-execution + scheduler + event-catalog 前置）已移除，
+  // 新链路（@workcortex/analytics-query）重建中、尚未接入，故此处不再预检分析就绪。
 
   // lark-cli 可用。M0 全链路用 bot 身份，因此只硬性要求 app 凭据与端点可达；
   // 用户 token 过期（token_local）只警告——它不影响 bot 收发，doctor 却会因此非零退出。
@@ -132,8 +121,15 @@ async function main(): Promise<void> {
   const queue = new EnvelopeQueue(cfg.queue, log);
   const sender = new LarkSender({ bin: cfg.lark.bin, log });
   const consoleSender = new ConsoleSender(log);
-  // 进程内驱动分析能力的声明式调度器（build 产物在 abilityRoot/build/ 下）
-  const runner = createSchedulerRunner({ abilityRoot, log });
+  // 旧数据分析能力（query-execution scheduler）已移除；新链路 @workcortex/analytics-query
+  // 重建中、尚未接入。此处为占位 runner：任何查询都以「能力未配置」明确告知，不静默吞。
+  const runner: RunnerFn = async (_task, emit) => {
+    emit({
+      kind: "error",
+      reason: "数据分析能力暂未配置：旧链路已移除，新链路（analytics-query）正在重建中。",
+      retriable: false,
+    });
+  };
   let sessions: Sessions;
   const runtime = new Runtime({
     maxConcurrent: cfg.runtime.maxConcurrent,
