@@ -10,6 +10,15 @@ description: Query and analyze 火山引擎 DataFinder product analytics. Two ca
 - **能力 A — 看板复用（dashboard）**：复用 DataFinder 里已建好的看板/报表（口径由资产自身定义，最稳）。**当前可用** ✅
 - **能力 B — 自由分析（free analysis）**：对事件自定义指标/拆分，构造 analysis DSL 查询。**当前可用** ✅
 
+## 决策顺序（必读，强制）
+
+**永远优先能力 A（看板复用），自由分析只是兜底。** 每条指标问题按此走：
+
+1. **先查已有报表**：`call dashboard.list` → 对相关看板 `call dashboard.reports`，看是否有能直接回答该问题的报表（按报表名/指标语义匹配，如 PV/UV/DAU/留存/漏斗）。
+2. **命中 → 用能力 A 出数（report.query），到此为止**：不要再做自由分析，不要"顺手"查相邻事件/指标，不要给用户没问的额外数据。
+3. **仅当确认没有任何可用报表** → 才用能力 B（自由分析）构造 DSL。在回复里说明"无现成报表，已用自由分析"。
+4. **不过度探索**：只回答用户问的那个问题，用最短路径；省下的每一步都更快。
+
 所有 DataFinder 调用都经独立 SDK 包 `@workcortex/datafinder-sdk`（manifest 驱动、自描述、每端点带官方文档链接）。凭据在 ability 根的 `.env.local`，由适配层 `domains/datafinder-interface/index.js` 注入。
 
 > 历史：旧的 query-execution 声明式调度链路（understand→route→prepare→review→…）已**移除**，因为它未经验证、且 analysis.query 实测 400。现在是 skill 驱动 + SDK 直调，逐能力验证打磨。
