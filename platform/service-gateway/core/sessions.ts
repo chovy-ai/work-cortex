@@ -8,11 +8,13 @@ export interface RunRecord {
   run_id: string;
   channel: string;
   conversation: Conversation;
-  status: "running" | "done" | "failed";
+  member: string; // 发起人（principal），resume 时重建 Task 需要
+  status: "running" | "awaiting" | "done" | "failed"; // awaiting=已发问、挂起等用户回复（人在环 gate）
   created_at: string;
   lastProgressSentAt: number; // 进度外发节流（ms epoch）
   receiptHandle: Promise<string | null> | null; // 「工作中」reaction 句柄（回复前撤掉）
   progressHandle: Promise<string | null> | null; // 进度消息句柄：首条发出后原地更新，长任务只占一条气泡
+  awaitOptions?: string[]; // 挂起时 ask 给出的选项（["确认","修改","取消"] 或 []），用于解释用户回复
 }
 
 // 进度外发节流：原地更新不刷屏，间隔只需防 API 频控，可以勤一点；
@@ -94,10 +96,21 @@ export class Sessions {
 
   handleEnvelope(env: Envelope): void {
     const log = this.opts.log;
+
+    // 卡片动作（confirm/revise/cancel）：路由到对应 run 的 resume；无挂起 run 则忽略
+    if (env.kind === "action") {
+      const a = env.action;
+      const rec = a ? this.runs.get(a.run_id) : undefined;
+      if (!a || !rec || rec.status !== "awaiting") {
+        log("debug", "sessions", "action without awaiting run ignored", { event_id: env.event_id, run_id: a?.run_id });
+        return;
+      }
+      this.resumeRun(rec, a.action_id, a.params ?? {});
+      return;
+    }
+
     if (env.kind !== "message") {
-      log(env.kind === "action" ? "warn" : "debug", "sessions", `ignored kind=${env.kind} (M0)`, {
-        event_id: env.event_id,
-      });
+      log("debug", "sessions", `ignored kind=${env.kind} (M0)`, { event_id: env.event_id });
       return;
     }
     if (env.conversation.type === "group") {
@@ -105,7 +118,16 @@ export class Sessions {
       return;
     }
     const key = this.convKey(env);
-    if (this.activeByConv.has(key)) {
+    const activeId = this.activeByConv.get(key);
+    if (activeId) {
+      const rec = this.runs.get(activeId);
+      // 该会话有 run 正挂起等回复 → 这条消息就是用户的回答，路由到 resume（不排队）
+      if (rec && rec.status === "awaiting") {
+        const { action_id, params } = mapReply(env.message!.text, rec.awaitOptions ?? []);
+        this.resumeRun(rec, action_id, params);
+        return;
+      }
+      // 否则该会话有 run 在跑 → per-conversation FIFO 排队
       const q = this.pending.get(key) ?? [];
       if (q.length >= this.opts.pendingLimit) {
         log("error", "sessions", "pending limit reached, message dropped", { conv: key, limit: this.opts.pendingLimit });
@@ -177,10 +199,31 @@ export class Sessions {
         this.finish(rec, "failed");
         this.deliverAfterClearingReceipt(rec, (s) => s.sendText(rec.conversation, `分析失败：${friendlyError(ev.reason)}`));
         return;
-      case "ask":
+      case "ask": {
+        // 人在环 gate：把问题发给用户，run 转 awaiting（不终结、不归档、仍占着会话），
+        // 用户回复经 resume 续跑。撤掉「工作中」回执——此刻是用户该动了。
+        rec.status = "awaiting";
+        rec.awaitOptions = ev.options;
+        rec.lastProgressSentAt = 0;
+        rec.progressHandle = null; // 续跑后进度重新发一条新气泡
+        const sender = this.senderFor(rec);
+        if (ev.options.length && sender.sendActionCard) {
+          // 有选项 + 渠道支持卡片 → 发带按钮的交互卡片；点击经 card.action.trigger 回调续跑。
+          // 同时打字回「确认/取消」仍可用（mapReply），两条路都通。
+          const actions = ev.options.map((label) => ({ label, action_id: LABEL_TO_ACTION[label] ?? "revise" }));
+          this.deliverAfterClearingReceipt(rec, (s) => s.sendActionCard!(rec.conversation, ev.run_id, ev.prompt, actions));
+        } else {
+          // 无选项（澄清追问）或渠道不支持卡片 → 文本 + 打字回复兜底
+          const lines = [ev.prompt];
+          if (ev.options.length) lines.push(`\n请回复：${ev.options.join(" / ")}`);
+          this.deliverAfterClearingReceipt(rec, (s) => s.sendText(rec.conversation, lines.join("\n")));
+        }
+        log("info", "sessions", "run awaiting user input", { run_id: ev.run_id, options: ev.options.length });
+        return;
+      }
       case "signal":
-        // M0 不应出现（04 判定表）：warn + 按 error 收尾
-        log("warn", "sessions", `unexpected ${ev.kind} in M0, failing run`, { run_id: ev.run_id });
+        // signal 仍不支持：warn + 按 error 收尾
+        log("warn", "sessions", "unexpected signal, failing run", { run_id: ev.run_id });
         this.finish(rec, "failed");
         this.deliverAfterClearingReceipt(rec, (s) =>
           s.sendText(rec.conversation, "分析失败：能力返回了当前版本不支持的事件"),
@@ -214,6 +257,7 @@ export class Sessions {
       run_id: runId,
       channel: env.channel,
       conversation: env.conversation,
+      member: env.principal.channel_user_id,
       status: "running",
       created_at: new Date().toISOString(),
       lastProgressSentAt: 0, // 回执是 reaction（非气泡），首条进度可立即发，不必再等一个节流窗口
@@ -226,6 +270,35 @@ export class Sessions {
     this.opts.log("info", "sessions", "run started", { run_id: runId, conv: key });
     // 回执：排队期已贴过 reaction 的沿用同一句柄（不重复贴）；否则现贴「工作中」reaction（💪）
     rec.receiptHandle = existingReceipt !== undefined ? existingReceipt : this.establishReceipt(env.channel, env.conversation, false);
+    this.opts.submit(task);
+  }
+
+  /**
+   * 续跑一个挂起（awaiting）的 run：用同一 run_id 提交带 resume 的 Task。
+   * runner 据 run_id 从 outputs/<run_id>/state.json 恢复调度器状态、provide_input 后继续。
+   */
+  private resumeRun(rec: RunRecord, action_id: "confirm" | "revise" | "cancel", params: Record<string, unknown>): void {
+    rec.status = "running";
+    rec.awaitOptions = undefined;
+    rec.lastProgressSentAt = 0;
+    rec.progressHandle = null;
+    const task: Task = {
+      v: 1,
+      run_id: rec.run_id,
+      capability: this.opts.capabilityId,
+      input: { text: typeof params["text"] === "string" ? (params["text"] as string) : "", attachments: [] },
+      context: {
+        principal: { member: rec.member, roles: [] },
+        conversation_ref: encodeConversationRef(rec.channel, rec.conversation),
+        history: [],
+      },
+      resume: { action_id, params },
+      limits: { timeout_s: this.opts.timeoutSec },
+    };
+    assertValid("task", task);
+    this.opts.log("info", "sessions", "run resumed", { run_id: rec.run_id, action_id });
+    // 重新贴「工作中」回执（旧句柄已在发问时撤掉）
+    rec.receiptHandle = this.establishReceipt(rec.channel, rec.conversation, false);
     this.opts.submit(task);
   }
 
@@ -299,6 +372,28 @@ function friendlyError(reason: string): string {
   if (/未产出/.test(reason)) return "这次没能得出结果，麻烦换个问法或稍后再试一次。";
   if (/能力执行异常|违约|运行目录创建失败/.test(reason)) return "分析过程中出了点状况，没能完成，请稍后重试。";
   return reason; // 其余（如能力自己报的具体原因）已是给人看的话，原样透传
+}
+
+/** 卡片按钮标签 → action_id（与 mapReply 的文本识别等价，供 sendActionCard 的按钮 value 用）。 */
+const LABEL_TO_ACTION: Record<string, "confirm" | "revise" | "cancel"> = {
+  确认: "confirm",
+  修改: "revise",
+  取消: "cancel",
+};
+
+/**
+ * 用户对人在环 gate 的回复 → resume 动作。
+ * 有选项（方案确认 gate）：识别「确认 / 取消」，其余当「修改意见」(revise，带原文)。
+ * 无选项（澄清追问）：自由文本一律作为补充信息 (revise，带原文)。
+ */
+function mapReply(text: string, options: string[]): { action_id: "confirm" | "revise" | "cancel"; params: Record<string, unknown> } {
+  const t = text.trim();
+  if (options.length) {
+    if (/确认|确定|^(是|对|ok|yes|y)$/i.test(t)) return { action_id: "confirm", params: {} };
+    if (/取消|算了|^(不了?|no|n)$/i.test(t)) return { action_id: "cancel", params: {} };
+    return { action_id: "revise", params: { text: t } };
+  }
+  return { action_id: "revise", params: { text: t } };
 }
 
 function newRunId(): string {

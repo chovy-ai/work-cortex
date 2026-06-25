@@ -170,17 +170,53 @@ test("event for unknown or already-terminal run is dropped", async () => {
   assert.equal(h.replies().length, 1);
 });
 
-test("unexpected ask in M0 fails the run", async () => {
+test("ask suspends run; 「确认」reply resumes same run_id with confirm payload", async () => {
+  const h = harness();
+  h.sessions.handleEnvelope(env("e1"));
+  const runId = h.submitted[0].run_id;
+  // 能力发问（人在环 gate）→ 问题发给用户，run 挂起
+  h.sessions.handleEvent({
+    v: 1, run_id: runId, seq: 1, at: new Date().toISOString(), kind: "ask", prompt: "确认方案?", options: ["确认", "修改", "取消"],
+  });
+  await tick();
+  assert.equal(h.replies().length, 1);
+  assert.match(h.replies()[0].body, /确认方案/);
+  assert.match(h.replies()[0].body, /确认 \/ 修改 \/ 取消/); // 选项提示
+  // 用户回复「确认」→ 同一 run_id 带 confirm 续跑（不新开 run）
+  h.sessions.handleEnvelope(env("e2", { text: "确认" }));
+  assert.equal(h.submitted.length, 2);
+  assert.equal(h.submitted[1].run_id, runId);
+  assert.deepEqual(h.submitted[1].resume, { action_id: "confirm", params: {} });
+  // 续跑产出结果 → 正常回复
+  h.sessions.handleEvent(h.resultEvent(runId, "**搞定**"));
+  await tick();
+  assert.ok(h.replies().some((m) => m.kind === "result" && m.body === "**搞定**"));
+});
+
+test("clarification (no options): free-text reply resumes as revise with the text", async () => {
   const h = harness();
   h.sessions.handleEnvelope(env("e1"));
   const runId = h.submitted[0].run_id;
   h.sessions.handleEvent({
-    v: 1, run_id: runId, seq: 1, at: new Date().toISOString(), kind: "ask", prompt: "确认?", options: ["confirm"],
+    v: 1, run_id: runId, seq: 1, at: new Date().toISOString(), kind: "ask", prompt: "你指的是哪个指标?", options: [],
   });
   await tick();
-  assert.equal(h.replies().length, 1);
-  assert.equal(h.replies()[0].kind, "text");
-  assert.match(h.replies()[0].body, /不支持/);
+  h.sessions.handleEnvelope(env("e2", { text: "日活" }));
+  assert.equal(h.submitted.length, 2);
+  assert.equal(h.submitted[1].run_id, runId);
+  assert.deepEqual(h.submitted[1].resume, { action_id: "revise", params: { text: "日活" } });
+});
+
+test("「取消」reply resumes with cancel", async () => {
+  const h = harness();
+  h.sessions.handleEnvelope(env("e1"));
+  const runId = h.submitted[0].run_id;
+  h.sessions.handleEvent({
+    v: 1, run_id: runId, seq: 1, at: new Date().toISOString(), kind: "ask", prompt: "确认方案?", options: ["确认", "修改", "取消"],
+  });
+  await tick();
+  h.sessions.handleEnvelope(env("e2", { text: "取消" }));
+  assert.equal(h.submitted[1].resume?.action_id, "cancel");
 });
 
 test("progress on update-capable channel: first sends a new message, rest update it in place (no spam)", async () => {

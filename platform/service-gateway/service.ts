@@ -11,7 +11,7 @@ import { startLarkListener } from "./connectors/lark/listener.js";
 import { LarkSender } from "./connectors/lark/sender.js";
 import { ConsoleSender } from "./connectors/console/sender.js";
 import { startConsoleHttp, type ConsoleHttpHandle } from "./connectors/console/http.js";
-import { createAcpRunner } from "./capabilities/data-analysis/runner.js";
+import { createSchedulerRunner } from "./capabilities/data-analysis/runner.js";
 
 const execFileP = promisify(execFile);
 
@@ -25,7 +25,7 @@ interface Config {
   runtime: { maxConcurrent: number; timeoutSec: number; graceSec: number };
   queue: { maxSize: number; dedupCapacity: number };
   sessions: { pendingPerConversation: number; terminalKeep: number };
-  capability: { id: string; runtime: { agent: string; cmd: string; args: string[] } };
+  capability: { id: string };
   lark: { bin: string; subscribeArgs: string[] };
   console: { enabled: boolean; host: string; port: number };
   log: { level: LogLevel };
@@ -35,9 +35,8 @@ const DEFAULTS: Config = {
   runtime: { maxConcurrent: 1, timeoutSec: 600, graceSec: 10 },
   queue: { maxSize: 1000, dedupCapacity: 4096 },
   sessions: { pendingPerConversation: 10, terminalKeep: 512 },
-  // cmd 含 "/" 时按相对 sgRoot 解析；默认用本地安装的官方适配器（npx 会误拉 registry 上的同名废弃包）
-  capability: { id: "data-analysis", runtime: { agent: "claude-code", cmd: "node_modules/.bin/claude-code-acp", args: [] } },
-  lark: { bin: "lark-cli", subscribeArgs: ["event", "+subscribe", "--as", "bot", "--event-types", "im.message.receive_v1", "--quiet"] },
+  capability: { id: "data-analysis" },
+  lark: { bin: "lark-cli", subscribeArgs: ["event", "+subscribe", "--as", "bot", "--event-types", "im.message.receive_v1,card.action.trigger", "--quiet"] },
   // 控制台入站：本机回环 HTTP，供 gateway-console GUI 直接提交查询（结果走文件系统呈现）
   console: { enabled: true, host: "127.0.0.1", port: 8765 },
   log: { level: "info" },
@@ -76,6 +75,11 @@ async function preflight(cfg: Config, log: ReturnType<typeof createLogger>): Pro
     mkdirSync(join(abilityRoot, "outputs"), { recursive: true });
   } catch (err) {
     fail(`outputs/ 不可写：${String(err)}`, "检查仓库目录权限");
+  }
+
+  // 分析引擎已编译（runner 进程内 import build 产物）
+  if (!existsSync(join(abilityRoot, "build", "domains", "query-execution", "scheduler", "scheduler.js"))) {
+    fail("分析引擎未编译（build/ 缺失）", "在仓库根运行 npm run build:ability");
   }
 
   // 知识库存在（M0 知识更新是手动前置）
@@ -128,19 +132,8 @@ async function main(): Promise<void> {
   const queue = new EnvelopeQueue(cfg.queue, log);
   const sender = new LarkSender({ bin: cfg.lark.bin, log });
   const consoleSender = new ConsoleSender(log);
-  // ACP 适配器 bin：cmd 含 "/" 时按相对路径解析。npm workspaces 会把依赖提升到仓库根，
-  // 独立安装则落在包内，故 sgRoot / repoRoot 两处候选取先命中者（都不存在时退回 sgRoot 解析以报错清晰）。
-  let rtCmd = cfg.capability.runtime.cmd;
-  if (rtCmd.includes("/")) {
-    const candidates = [resolve(sgRoot, rtCmd), resolve(repoRoot, rtCmd)];
-    rtCmd = candidates.find((p) => existsSync(p)) ?? candidates[0];
-  }
-  const runner = createAcpRunner({
-    cmd: rtCmd,
-    args: cfg.capability.runtime.args,
-    cwd: abilityRoot,
-    log,
-  });
+  // 进程内驱动分析能力的声明式调度器（build 产物在 abilityRoot/build/ 下）
+  const runner = createSchedulerRunner({ abilityRoot, log });
   let sessions: Sessions;
   const runtime = new Runtime({
     maxConcurrent: cfg.runtime.maxConcurrent,

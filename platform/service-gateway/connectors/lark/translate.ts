@@ -9,7 +9,12 @@ export function translate(raw: unknown): Envelope | null {
   const r = raw as Record<string, any>;
   const header = r?.header;
   const event = r?.event;
-  if (!header?.event_id || header?.event_type !== "im.message.receive_v1") return null;
+  if (!header?.event_id) return null;
+
+  // 卡片按钮回调 → action 信封（run_id / action_id 来自我们塞进按钮的 value）
+  if (header.event_type === "card.action.trigger") return translateCardAction(header, event);
+
+  if (header.event_type !== "im.message.receive_v1") return null;
 
   const sender = event?.sender;
   if (sender?.sender_type !== "user") return null; // 防自激回环：机器人/应用消息不处理
@@ -45,6 +50,50 @@ export function translate(raw: unknown): Envelope | null {
     },
     kind: "message",
     message: { text, attachments: [] },
+    raw_ref: null,
+  };
+}
+
+/**
+ * card.action.trigger → action 信封。按钮 value 里带回 { action_id, run_id }（我们发卡片时塞的）；
+ * 会话/发起人取自 context.open_chat_id 与 operator.open_id。run_id 不合或 action_id 非法则返回 null。
+ */
+function translateCardAction(header: Record<string, any>, event: Record<string, any>): Envelope | null {
+  const rawVal = event?.action?.value;
+  let value: Record<string, any> | null = null;
+  if (rawVal && typeof rawVal === "object") value = rawVal;
+  else if (typeof rawVal === "string") {
+    try {
+      value = JSON.parse(rawVal);
+    } catch {
+      value = null;
+    }
+  }
+  const runId = value?.run_id;
+  const actionId = value?.action_id;
+  if (!runId || (actionId !== "confirm" && actionId !== "revise" && actionId !== "cancel")) return null;
+
+  const ctx = event?.context ?? {};
+  const chatId = ctx.open_chat_id;
+  if (!chatId) return null;
+
+  return {
+    v: 1,
+    event_id: String(header.event_id),
+    dedup_key: `lark:${header.event_id}`,
+    channel: "lark",
+    received_at: new Date().toISOString(),
+    conversation: {
+      id: String(chatId),
+      thread_id: null,
+      type: "p2p",
+      source_message_id: ctx.open_message_id ? String(ctx.open_message_id) : null,
+    },
+    principal: {
+      channel_user_id: String(event?.operator?.open_id ?? "unknown"),
+    },
+    kind: "action",
+    action: { run_id: String(runId), action_id: actionId, params: {} },
     raw_ref: null,
   };
 }

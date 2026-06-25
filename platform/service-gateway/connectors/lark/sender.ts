@@ -23,6 +23,35 @@ export class LarkSender implements ConnectorPort {
     await this.send(conversation, ["--markdown", summaryMarkdown]);
   }
 
+  /** 发交互卡片：每个按钮的 value 带回 { action_id, run_id }，点击经 card.action.trigger 回调译成 action 信封。 */
+  async sendActionCard(
+    conversation: Conversation,
+    runId: string,
+    prompt: string,
+    actions: { label: string; action_id: "confirm" | "revise" | "cancel" }[],
+  ): Promise<void> {
+    const btnType = (id: string): string => (id === "confirm" ? "primary" : id === "cancel" ? "danger" : "default");
+    const card = {
+      config: { wide_screen_mode: true },
+      elements: [
+        { tag: "div", text: { tag: "lark_md", content: prompt } },
+        {
+          tag: "action",
+          actions: actions.map((a) => ({
+            tag: "button",
+            text: { tag: "plain_text", content: a.label },
+            type: btnType(a.action_id),
+            value: { action_id: a.action_id, run_id: runId },
+          })),
+        },
+      ],
+    };
+    await this.exec([
+      "im", "+messages-send", "--as", "bot", "--chat-id", conversation.id,
+      "--msg-type", "interactive", "--content", JSON.stringify(card),
+    ]);
+  }
+
   /** 发一条可原地更新的进度文本，返回 message_id 句柄（拿不到则 null，core 退回逐条追加）。 */
   async sendProgress(conversation: Conversation, _runId: string, status: string): Promise<string | null> {
     return parseMessageId(await this.send(conversation, ["--text", status]));

@@ -12,6 +12,8 @@ abilities/data-analysis/knowledge-store/*
 !abilities/data-analysis/knowledge-store/.gitkeep
 abilities/data-analysis/outputs/*
 !abilities/data-analysis/outputs/.gitkeep
+# 误落在仓库根的运行产物（agent cwd 偏差时产生）
+/outputs/
 
 # 平台：service-gateway 本地构建/配置
 platform/service-gateway/node_modules/

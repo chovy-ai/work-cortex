@@ -1,219 +1,24 @@
-import { spawn } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
-import { Readable, Writable } from "node:stream";
-import {
-  ClientSideConnection,
-  PROTOCOL_VERSION,
-  ndJsonStream,
-  type Client,
-  type RequestPermissionRequest,
-  type RequestPermissionResponse,
-  type SessionNotification,
-} from "@zed-industries/agent-client-protocol";
-import type { RunnerFn, Task, TaskEventDraft } from "../../core/contracts.js";
+import { fileURLToPath, pathToFileURL } from "node:url";
+import type { ResultChart, ResultTable, RunnerFn, Task, TaskEventDraft } from "../../core/contracts.js";
 import type { Logger } from "../../core/log.js";
 
-export interface AcpRunnerOpts {
-  cmd: string; // ACP 适配器命令，如 "npx"
-  args: string[]; // 如 ["claude-code-acp"]
-  cwd: string; // 仓库根（agent 工作目录）
-  log: Logger;
-}
+// persona / 沉淀的表情用法与编译产物同级的源码目录（不参与编译）：
+// dist/capabilities/data-analysis/runner.js → 上 3 层到包根 → capabilities/data-analysis/
+const CAP_DIR = join(resolve(dirname(fileURLToPath(import.meta.url)), "..", "..", ".."), "capabilities", "data-analysis");
+const PERSONA_PATH = join(CAP_DIR, "persona.md");
+const EMOJI_LEARNED_PATH = join(CAP_DIR, "emoji-learned.md");
 
-/**
- * 06 · data-analysis 能力薄壳：每个 run 拉起一个 ACP agent 子进程，
- * 组装提示词 → session/prompt → 流式更新翻译为 progress / 最终回复累积为 result。
- * 权限完全开放（request_permission 一律允许）。signal → session/cancel + 终止子进程。
- */
-export function createAcpRunner(opts: AcpRunnerOpts): RunnerFn {
-  return async (task: Task, emit: (d: TaskEventDraft) => void, signal: AbortSignal): Promise<void> => {
-    const { log } = opts;
-    if (signal.aborted) return;
-
-    // 剥掉 Claude Code 会话标记：开发期 gateway 可能本身跑在 Claude Code 里，
-    // 适配器有嵌套会话检查；生产（launchd）环境本就没有这些变量
-    const env = { ...process.env };
-    delete env.CLAUDECODE;
-    delete env.CLAUDE_CODE_ENTRYPOINT;
-    const child = spawn(opts.cmd, opts.args, {
-      cwd: opts.cwd,
-      stdio: ["pipe", "pipe", "pipe"],
-      env,
-    });
-    child.stderr?.on("data", (d: Buffer) => {
-      const s = d.toString().trim();
-      if (s) log("debug", "runner.acp", "adapter stderr", { run_id: task.run_id, stderr: s.slice(0, 300) });
-    });
-
-    // 只保留「最后一次工具调用之后」的消息段作为最终回复——claude code 在
-    // 工具调用之间也会流式输出旁白，整段累积会把执行过程当成答案发出去
-    let segmentText = "";
-
-    const client: Client = {
-      async requestPermission(p: RequestPermissionRequest): Promise<RequestPermissionResponse> {
-        // 权限完全开放：优先 allow_always，其次 allow_once
-        const opt =
-          p.options.find((o) => o.kind === "allow_always") ??
-          p.options.find((o) => o.kind === "allow_once") ??
-          p.options[0];
-        log("debug", "runner.acp", "permission auto-allowed", { run_id: task.run_id, option: opt?.optionId });
-        if (!opt) return { outcome: { outcome: "cancelled" } };
-        return { outcome: { outcome: "selected", optionId: opt.optionId } };
-      },
-      async sessionUpdate(n: SessionNotification): Promise<void> {
-        try {
-          const u = n.update;
-          if (u.sessionUpdate === "agent_message_chunk" && u.content.type === "text") {
-            segmentText += u.content.text;
-          } else if (u.sessionUpdate === "tool_call") {
-            // 进度要讲清「在干嘛 + 目的」（用户反馈，2026-06-12）：优先用 agent 调工具前的
-            // 旁白（buildPrompt 已要求它一句中文说明意图），没有旁白才退回 kind 兜底文案；
-            // 不暴露命令/路径，原始 title 留 debug 日志排查用
-            const narration = narrationToProgress(segmentText);
-            segmentText = ""; // 工具调用开始 → 之前的文本是旁白，重开一段
-            const { title, kind } = u as { title?: string; kind?: string | null };
-            log("debug", "runner.acp", "tool call", { run_id: task.run_id, title: (title ?? "").slice(0, 200) });
-            // status 给 IM（叙述，不暴露命令/路径）；detail 留原始 title 给控制台看原始内容
-            const raw = title?.trim();
-            emit({
-              kind: "progress",
-              status: narration ?? describeToolKind(kind),
-              ...(raw ? { detail: raw } : {}),
-            });
-          }
-          // plan / available_commands_update / current_mode_update 等其余更新：忽略
-        } catch (err) {
-          log("warn", "runner.acp", "sessionUpdate handler error (ignored)", {
-            run_id: task.run_id,
-            error: String(err).slice(0, 200),
-          });
-        }
-      },
-    };
-
-    const stream = ndJsonStream(
-      Writable.toWeb(child.stdin!) as WritableStream<Uint8Array>,
-      Readable.toWeb(child.stdout!) as ReadableStream<Uint8Array>,
-    );
-    const conn = new ClientSideConnection(() => client, stream);
-
-    const killChild = (): void => {
-      if (child.exitCode === null) {
-        child.kill("SIGTERM");
-        setTimeout(() => {
-          if (child.exitCode === null) child.kill("SIGKILL");
-        }, 3000).unref();
-      }
-    };
-
-    let sessionId: string | null = null;
-    const onAbort = (): void => {
-      log("info", "runner.acp", "cancel requested", { run_id: task.run_id });
-      if (sessionId) void conn.cancel({ sessionId }).catch(() => {});
-      // 协作取消给 2s，随后强制终止子进程
-      setTimeout(killChild, 2000).unref();
-    };
-    signal.addEventListener("abort", onAbort, { once: true });
-
-    try {
-      await conn.initialize({
-        protocolVersion: PROTOCOL_VERSION,
-        clientCapabilities: { fs: { readTextFile: false, writeTextFile: false } },
-      });
-      const session = await conn.newSession({ cwd: opts.cwd, mcpServers: [] });
-      sessionId = session.sessionId;
-      emit({ kind: "progress", status: "正在分析…" });
-
-      const resp = await conn.prompt({
-        sessionId,
-        prompt: [{ type: "text", text: buildPrompt(task) }],
-      });
-
-      if (signal.aborted || resp.stopReason === "cancelled") {
-        return; // 终态由 05 runtime 补 synthetic error
-      }
-      if (resp.stopReason !== "end_turn") {
-        emit({ kind: "error", reason: `agent 异常终止（${resp.stopReason}）`, retriable: false });
-        return;
-      }
-      const summary = segmentText.trim();
-      if (!summary) {
-        emit({ kind: "error", reason: "agent 未产出回复内容", retriable: false });
-        return;
-      }
-      emit({
-        kind: "result",
-        summary,
-        tables: [], // M0：最终回复即结果，不做结构化拆分
-        charts: [],
-        artifacts_dir: `outputs/${task.run_id}`,
-      });
-    } finally {
-      signal.removeEventListener("abort", onAbort);
-      killChild();
-    }
-  };
-}
-
-/**
- * 工具调用前的旁白 → 进度文案：取最后一个非空行（最贴近本次调用的意图），
- * 去掉 markdown 修饰，超长截断。旁白含代码块/命令痕迹时放弃，避免把执行细节漏给用户。
- */
-function narrationToProgress(text: string): string | null {
-  const line =
-    text
-      .trim()
-      .split("\n")
-      .map((s) => s.replace(/^[#>*\-\d.、\s]+/, "").trim())
-      .filter(Boolean)
-      .pop() ?? "";
-  if (!line || line.includes("`") || line.includes("/")) return null;
-  return line.length > 60 ? `${line.slice(0, 60)}…` : line;
-}
-
-/** ACP ToolKind → 进度兜底文案（agent 没给旁白时用；sessions 侧 30s 节流） */
-function describeToolKind(kind: string | null | undefined): string {
-  switch (kind) {
-    case "read":
-      return "查看数据文件";
-    case "execute":
-      return "执行数据查询";
-    case "search":
-      return "检索相关数据";
-    case "fetch":
-      return "获取数据";
-    case "think":
-      return "梳理分析思路";
-    case "edit":
-    case "delete":
-    case "move":
-      return "整理输出";
-    default:
-      return "处理中";
-  }
-}
-
-// persona.md 与源码同目录（不参与编译），每次 run 现读——调性格改文件即可，无需重建
-const PERSONA_PATH = join(
-  resolve(dirname(fileURLToPath(import.meta.url)), "..", "..", ".."),
-  "capabilities",
-  "data-analysis",
-  "persona.md",
-);
-
-const EMOJI_LEARNED_PATH = join(dirname(PERSONA_PATH), "emoji-learned.md");
-
+/** 读 bot 嗓音/口吻（persona.md + 机器沉淀的表情用法），注入调度器上下文供报告叙述用。缺失返回空串。 */
 function loadPersona(): string {
   let text = "";
   try {
     text = readFileSync(PERSONA_PATH, "utf-8").trim();
   } catch {
-    return ""; // persona 缺失不挡执行
+    return "";
   }
   try {
-    // 机器沉淀的表情用法（learn_emoji 工具产出）存在时自动追加
     text += "\n\n" + readFileSync(EMOJI_LEARNED_PATH, "utf-8").trim();
   } catch {
     /* 还没沉淀过，正常 */
@@ -221,34 +26,250 @@ function loadPersona(): string {
   return text;
 }
 
-function buildPrompt(task: Task): string {
-  return [
-    loadPersona(),
-    "",
-    "你是数据分析执行器，按 skills/data-analytics/SKILL.md 工作。",
-    "本次只允许走 dashboard 路径（已有报表查询）；禁止 raw_analysis。",
-    "",
-    "硬性约束（违反任何一条都是错误）：",
-    "- 数据查询只能用仓库既有工具（node build/domains/datafinder-interface/cli.js …，凭据在 .env.local；build/ 缺失先 npm run build:tools）；",
-    "- 禁止安装任何依赖（pip / npm）；禁止访问外部网页或在线文档；",
-    "- 工具调用失败或数据不可得时：立即停止尝试，不要修环境、不要查文档、不要换方案，",
-    "  直接按下述格式回复「无法回答 + 具体失败原因」。快速诚实的失败远好于长时间无响应；",
-    "- 总预算约 8 分钟，超时会被强制终止，用户只会看到一条超时报错。",
-    "",
-    "执行过程对提问者可见：每次调用工具之前，先单独输出一句简短中文旁白（20 字以内），",
-    "说明接下来这一步在做什么、目的是什么（如「查指标口径，确认渗透率怎么算」）；",
-    "旁白里禁止出现命令、代码、文件路径或英文术语。",
-    "",
-    "你的最终回复将被原样发给飞书提问者，要求：",
-    "- 用中文回复，面向业务同学（不是工程师）；",
-    "- 最后一条消息必须是纯回复：第一个字就是结论，禁止先写分析过程、数据提取笔记或任何英文思考再给答案；",
-    "- 结论先行（一句话）→ 关键数字（markdown 表格）→ 简短口径说明；",
-    "- 不要包含执行过程叙述、工具调用细节或代码。",
-    "",
-    `如需写文件，放在 outputs/${task.run_id}/ 目录下；`,
-    `严禁创建或修改 outputs/${task.run_id}/.gateway/（网关审计目录）。`,
-    "",
-    "[用户问题]",
-    task.input.text,
-  ].join("\n");
+export interface SchedulerRunnerOpts {
+  /** 分析能力本体根目录（含 build/ 与 outputs/）。 */
+  abilityRoot: string;
+  log: Logger;
+}
+
+// —— 被驱动的 scheduler 的最小结构（进程内动态 import，故在此本地声明类型）——
+
+interface SchedulerState {
+  run_id: string;
+  current_step: string;
+  context: Record<string, any>;
+  status: string; // running | awaiting_input | completed | failed
+  awaiting_step: string | null;
+  await_payload: Record<string, any>;
+  history: Record<string, any>[];
+}
+
+interface StepInfo {
+  step_id: string;
+  label: string;
+  kind: string;
+}
+
+interface SchedulerInstance {
+  new_state(context?: Record<string, any> | null, run_id?: string | null): SchedulerState;
+  resume(run_id: string): SchedulerState;
+  provide_input(state: SchedulerState, payload: Record<string, any>): SchedulerState;
+  run(state: SchedulerState, opts?: { onStep?: (info: StepInfo) => void; signal?: AbortSignal }): Promise<SchedulerState>;
+}
+
+interface SchedulerModule {
+  StepScheduler: new () => SchedulerInstance;
+}
+
+/**
+ * 06 · data-analysis 能力：进程内驱动查询执行域的声明式 step 调度器。
+ *
+ * 不再拉起一个自由发挥的 ACP agent 读 SKILL.md——分析流程由 scheduler 的 step 图强制执行，
+ * 需要 LLM 的步骤（understand / prepare / 评审 / 叙述）各自经 atomic-abilities 自取 Claude。
+ *   - 逐步 onStep → progress（用 workflow.json 的中文 label，讲清「在干嘛」）；
+ *   - await_input → ask（人在环 gate，由 gateway 问用户、回复经 task.resume 续跑）；
+ *   - 终态 report → result；失败 → error。
+ * state 按 run_id 持久化在 outputs/<run_id>/state.json，resume 据此恢复。
+ */
+export function createSchedulerRunner(opts: SchedulerRunnerOpts): RunnerFn {
+  const { abilityRoot, log } = opts;
+  const persona = loadPersona(); // 进程级读一次：嗓音很少变，改文件重启即可
+  const schedulerUrl = pathToFileURL(
+    join(abilityRoot, "build", "domains", "query-execution", "scheduler", "scheduler.js"),
+  ).href;
+  let modPromise: Promise<SchedulerModule> | null = null;
+  const loadModule = (): Promise<SchedulerModule> => (modPromise ??= import(schedulerUrl) as Promise<SchedulerModule>);
+
+  return async (task: Task, emit: (d: TaskEventDraft) => void, signal: AbortSignal): Promise<void> => {
+    if (signal.aborted) return;
+
+    let mod: SchedulerModule;
+    try {
+      mod = await loadModule();
+    } catch (err) {
+      log("error", "runner.scheduler", "cannot load scheduler build", { run_id: task.run_id, error: String(err) });
+      emit({ kind: "error", reason: "分析引擎未就绪（build 缺失？先 npm run build）", retriable: false });
+      return;
+    }
+    const scheduler = new mod.StepScheduler();
+
+    // —— 建/恢复 state ——
+    let state: SchedulerState;
+    if (task.resume) {
+      try {
+        state = scheduler.resume(task.run_id);
+      } catch (err) {
+        log("error", "runner.scheduler", "resume failed", { run_id: task.run_id, error: String(err) });
+        emit({ kind: "error", reason: "找不到待恢复的分析任务", retriable: false });
+        return;
+      }
+      // 用户取消 gate → 直接收尾，不再续跑
+      if (task.resume.action_id === "cancel") {
+        emit({ kind: "result", summary: "好的，已取消本次分析。", tables: [], charts: [] });
+        return;
+      }
+      try {
+        scheduler.provide_input(state, resumePayload(task, state));
+      } catch (err) {
+        log("error", "runner.scheduler", "provide_input failed", { run_id: task.run_id, error: String(err) });
+        emit({ kind: "error", reason: "无法恢复分析任务状态", retriable: false });
+        return;
+      }
+    } else {
+      state = scheduler.new_state({ text: task.input.text, persona }, task.run_id);
+    }
+
+    // —— 跑 ——
+    emit({ kind: "progress", status: "正在分析…" });
+    try {
+      state = await scheduler.run(state, {
+        signal,
+        onStep: (info) => {
+          log("debug", "runner.scheduler", "step", { run_id: task.run_id, step: info.step_id });
+          emit({ kind: "progress", status: info.label, detail: info.step_id });
+        },
+      });
+    } catch (err) {
+      log("error", "runner.scheduler", "scheduler threw", { run_id: task.run_id, error: String(err) });
+      emit({ kind: "error", reason: `分析执行出错：${truncate(String(err), 200)}`, retriable: false });
+      return;
+    }
+
+    if (signal.aborted) return; // 终态由 runtime 补 synthetic error
+
+    // —— 终态映射 ——
+    switch (state.status) {
+      case "completed":
+        emit(buildResult(state, task));
+        return;
+      case "awaiting_input":
+        emit(buildAsk(state));
+        return;
+      case "failed": {
+        const msg = lastMessage(state) ?? "分析未能完成";
+        emit({ kind: "error", reason: msg, retriable: false });
+        return;
+      }
+      default:
+        // running 但循环退出 = 被 abort（signal 已在上面拦截）；其余视为异常
+        emit({ kind: "error", reason: "分析未产出终态", retriable: false });
+        return;
+    }
+  };
+}
+
+/** task.resume → scheduler.provide_input 的 payload，依挂起的 step 解释。 */
+function resumePayload(task: Task, state: SchedulerState): Record<string, any> {
+  const params = task.resume?.params ?? {};
+  if (state.awaiting_step === "understand") {
+    // 澄清：用户回复的自由文本（连接器放在 params.text）作为补充信息
+    return { answer: String(params["text"] ?? "") };
+  }
+  // 方案确认 gate：confirm → 通过；其余（revise）→ 要求修改，带上用户补充
+  return task.resume?.action_id === "confirm" ? { status: "confirmed" } : { status: "changes", ...params };
+}
+
+/** completed → result：report 叙述拼 markdown + 图表 + 结果表。 */
+function buildResult(state: SchedulerState, task: Task): TaskEventDraft {
+  const report = (state.context["report"] ?? {}) as {
+    summary?: string | null;
+    highlights?: string[];
+    caveats?: string | null;
+    execution_result?: any;
+  };
+  const lines: string[] = [];
+  if (report.summary) lines.push(report.summary);
+  for (const h of report.highlights ?? []) lines.push(`- ${h}`);
+  if (report.caveats) lines.push(`\n口径说明：${report.caveats}`);
+  const summary = lines.join("\n").trim() || "分析完成，但未生成可读结论。";
+
+  const charts: ResultChart[] = (state.context["charts"] ?? [])
+    .map((c: any) => ({ image_path: c?.path ?? c?.image_path }))
+    .filter((c: ResultChart) => Boolean(c.image_path));
+
+  return {
+    kind: "result",
+    summary,
+    tables: extractTables(report.execution_result),
+    charts,
+    artifacts_dir: `outputs/${task.run_id}`,
+  };
+}
+
+/** execution_result.result（table / records）→ ResultTable[]。 */
+function extractTables(er: any): ResultTable[] {
+  const r = er?.result;
+  if (!r) return [];
+  if (r.kind === "table" && Array.isArray(r.columns) && Array.isArray(r.rows)) {
+    return [{ columns: r.columns, rows: r.rows }];
+  }
+  if (r.kind === "records" && Array.isArray(r.records) && r.records.length) {
+    const columns = Object.keys(r.records[0]);
+    const rows = r.records.map((rec: Record<string, unknown>) => columns.map((c) => (rec[c] ?? null) as string | number | null));
+    return [{ columns, rows }];
+  }
+  return [];
+}
+
+/** awaiting_input → ask：依挂起 step 拼问题与选项。 */
+function buildAsk(state: SchedulerState): TaskEventDraft {
+  const p = state.await_payload ?? {};
+  if (state.awaiting_step === "understand") {
+    return { kind: "ask", prompt: String(p["clarification_question"] ?? "需要更多信息才能继续"), options: [] };
+  }
+  // raw.user_review：把方案卡片摊给用户确认（展示真实取数计划，而非占位）
+  const card = (p["review_card"] ?? {}) as {
+    metric?: string | null; aggregation?: string | null; identity?: string | null;
+    data_source?: string | null; event_set?: unknown; time_range?: string | null;
+    granularity?: string | null; breakdowns?: unknown; notes?: string | null; warnings?: string[];
+  };
+  return { kind: "ask", prompt: renderReviewCard(card), options: ["确认", "修改", "取消"] };
+}
+
+/** 把方案卡片渲染成用户能看懂的「打算怎么取数」。空字段省略，未知值原样展示。 */
+function renderReviewCard(card: {
+  metric?: string | null; aggregation?: string | null; identity?: string | null;
+  data_source?: string | null; event_set?: unknown; time_range?: string | null;
+  granularity?: string | null; breakdowns?: unknown; notes?: string | null; warnings?: string[];
+}): string {
+  const SOURCE: Record<string, string> = {
+    analysis_query: "DataFinder 分析查询", kafka: "Kafka 原始事件", local: "本地文件",
+  };
+  const TIME: Record<string, string> = {
+    yesterday: "昨天", today: "今天", last_7_days: "最近 7 天", last_30_days: "最近 30 天",
+  };
+  const GRAN: Record<string, string> = { day: "按天", hour: "按小时", week: "按周", month: "按月" };
+  const evs = Array.isArray(card.event_set) ? (card.event_set as string[]) : [];
+  const eventText = evs.length === 0 ? null : evs.includes("*") ? "全部事件" : evs.join("、");
+  const bds = Array.isArray(card.breakdowns) ? (card.breakdowns as string[]) : [];
+
+  const lines = ["请确认本次分析方案："];
+  if (card.metric) {
+    // identity 后缀仅在聚合口径未提及它时补充，避免「count(distinct device_id)(device_id)」重复
+    const idSuffix = card.identity && !(card.aggregation ?? "").includes(card.identity) ? `（按 ${card.identity}）` : "";
+    const agg = card.aggregation ? `，口径 ${card.aggregation}${idSuffix}` : "";
+    lines.push(`· 指标：${card.metric}${agg}`);
+  }
+  if (card.data_source) lines.push(`· 数据源：${SOURCE[card.data_source] ?? card.data_source}`);
+  if (eventText) lines.push(`· 事件范围：${eventText}`);
+  if (card.time_range || card.granularity) {
+    const t = card.time_range ? (TIME[card.time_range] ?? card.time_range) : "";
+    const g = card.granularity ? `（${GRAN[card.granularity] ?? card.granularity}）` : "";
+    lines.push(`· 时间：${t}${g}`);
+  }
+  if (bds.length) lines.push(`· 拆分维度：${bds.join("、")}`);
+  if (card.notes) lines.push(`· 说明：${card.notes}`);
+  if (card.warnings?.length) lines.push(`· 注意：${card.warnings.join("；")}`);
+  // 「请回复：确认/修改/取消」由 sessions 的 ask 渲染统一追加，这里不再重复。
+  return lines.join("\n");
+}
+
+function lastMessage(state: SchedulerState): string | null {
+  const last = state.history.at(-1);
+  const msg = last?.["message"];
+  return typeof msg === "string" && msg.trim() ? msg.trim() : null;
+}
+
+function truncate(s: string, n: number): string {
+  return s.length > n ? `${s.slice(0, n)}…` : s;
 }
