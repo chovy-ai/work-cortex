@@ -9,6 +9,7 @@
     "test:tools": "npm run build:tools && node --test 'build/tests/*.test.js'"
   },
   "dependencies": {
+    "@workcortex/datafinder-sdk": "*",
     "atomic-abilities": "*",
     "kafkajs": "^2.2.4"
   },

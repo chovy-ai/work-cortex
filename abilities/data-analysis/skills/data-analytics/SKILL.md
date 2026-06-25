@@ -1,122 +1,85 @@
 ---
 name: data-analytics
-description: Analyze application product analytics data from 火山引擎 DataFinder OpenAPI, DataFinder Kafka exports, CSV/NDJSON samples, or copied dashboard results. Use when users ask for application DAU/WAU/MAU, active growth, retention, funnel, feature usage, event debugging, user behavior flow, DataFinder OpenAPI selection, or analytics data interpretation.
+description: Query and analyze 火山引擎 DataFinder product analytics. Two capabilities — reuse existing dashboards/reports (DAU/PV/UV/retention/funnel saved charts), and free-form event analysis (custom metric/breakdown over events). Use when users ask for application metrics, growth/retention/funnel numbers, feature usage, or "why did metric X move".
 ---
 
 # Data Analytics
 
-## Workflow
+把自然语言分析诉求变成 **火山引擎 DataFinder** 调用并出数。两种能力：
 
-### Phase 0 — Sync & Index (run once per session, or when event data feels stale)
+- **能力 A — 看板复用（dashboard）**：复用 DataFinder 里已建好的看板/报表（口径由资产自身定义，最稳）。**当前可用** ✅
+- **能力 B — 自由分析（free analysis）**：对事件自定义指标/拆分，构造 analysis DSL 查询。**当前可用** ✅
 
-1. **Update application code**: Run `bash domains/event-knowledge/sync_app.sh` to pull the latest application monorepo. Skip if the user has confirmed the local copy is current.
-2. **Build event catalog**: Run `node build/domains/event-knowledge/extract_events.js` to regenerate (build first if missing: `npm run build:tools`) `knowledge-store/event-catalog.json`. The catalog contains every registered analytics event with its parameter names and the source files where the event fires (上报时机). Skip if the catalog already exists and the user has not requested a refresh.
-3. **Read the catalog**: Load `knowledge-store/event-catalog.json` into context. Each entry has:
-   - `event_name` — the DataFinder event identifier (e.g. `agent.message_sent`)
-   - `params` — list of parameter names the event carries
-   - `trigger_files` — source files that call the reporter (use file paths to infer 上报时机)
+## 决策顺序（必读，强制）
 
-The catalog is the authoritative event source for this session. Do not call the DataFinder metadata API for event discovery unless the catalog is unavailable.
+**永远优先能力 A（看板复用），自由分析只是兜底。** 每条指标问题按此走：
 
----
+1. **先查已有报表**：`call dashboard.list` → 对相关看板 `call dashboard.reports`，看是否有能直接回答该问题的报表（按报表名/指标语义匹配，如 PV/UV/DAU/留存/漏斗）。
+2. **命中 → 用能力 A 出数（report.query），到此为止**：不要再做自由分析，不要"顺手"查相邻事件/指标，不要给用户没问的额外数据。
+3. **仅当确认没有任何可用报表** → 才用能力 B（自由分析）构造 DSL。在回复里说明"无现成报表，已用自由分析"。
+4. **不过度探索**：只回答用户问的那个问题，用最短路径；省下的每一步都更快。
 
-### Phase 1 — Understand & Classify
+所有 DataFinder 调用都经独立 SDK 包 `@workcortex/datafinder-sdk`（manifest 驱动、自描述、每端点带官方文档链接）。凭据在 ability 根的 `.env.local`，由适配层 `domains/datafinder-interface/index.js` 注入。
 
-1. Clarify the analysis target: metric, time range, timezone, breakdown dimensions, expected output, and whether the user wants a factual query result or an analytical explanation.
-2. Inventory callable capabilities before routing. Read `domains/intent-routing/capability-inventory.md` first and use `domains/intent-routing/capabilities.json` as the machine-readable source of CapabilitySpec truth.
-3. Ground the QueryIntent in real assets:
-   - **Event knowledge**: Use the event catalog from Phase 0 to validate event names and understand 上报时机. Do not invent event names not present in the catalog. Note that `trigger_files` may be empty for events dispatched indirectly (variable event name, factory/registry) — the event is still real.
-   - **Dashboard list**: Call `dashboard.list` via the DataFinder module (`domains/datafinder-interface/`) to retrieve available dashboards and reports with their ids and names. Required when the user references a dashboard by name or when `query_path` may be `dashboard`. See "DataFinder OpenAPI module" below.
-   - If OpenAPI config is not yet available, proceed without the dashboard list and flag unresolved dashboard names in `QueryIntent.warnings`. Event grounding still works from the local catalog.
-4. Convert natural language into a CapabilitySpec-bound QueryIntent. Read `domains/intent-routing/query-intent-protocol.md` and validate shape against `domains/intent-routing/query-intent.schema.json`. The intent **must** include a `query_path` field — either `dashboard` or `raw_analysis` — which drives the route in Phase 2. Use the event catalog to validate event names and the dashboard list to resolve dashboard ids.
+> 历史：旧的 query-execution 声明式调度链路（understand→route→prepare→review→…）已**移除**，因为它未经验证、且 analysis.query 实测 400。现在是 skill 驱动 + SDK 直调，逐能力验证打磨。
 
-### Phase 2 — Route by Query Path
+## 工具入口（agent 用）
 
----
-
-#### Path A — Dashboard / Chart Query (`query_path: dashboard`)
-
-Use when the user references an existing DataFinder dashboard, report, or saved chart, or provides a `report_id` / `dashboard_id`. The metric definition and calculation logic live entirely inside the DataFinder asset; this path only supplies a time range override. No review gate is required.
-
-4A. Confirm `report_id` or `dashboard_id` from the QueryIntent slots. If missing, search for the dashboard by name using `dashboard.list` / `dashboard.reports` in the DataFinder module (`domains/datafinder-interface/`). See "DataFinder OpenAPI module" below for endpoint discovery.
-5A. Convert matched QueryIntent into QueryPlan. Read `domains/query-execution/protocols/dashboard/query-plan-protocol.md`. Resolve the time range to absolute dates and validate required slots (`asset_id`, `time_range`). Do not expand metric definitions or apply event selection logic — those are owned by the asset.
-6A. Compile QueryPlan into an executable request plan. Read `domains/query-execution/protocols/dashboard/compiled-query-protocol.md`. The request body carries only `asset_id` and the resolved time range.
-7A. Execute the compiled query and return ExecutionResult. Read `domains/query-execution/protocols/dashboard/execution-result-protocol.md`.
-8A. Return the result. Report the asset id, time range used, and any result caveats.
-
----
-
-#### Path B — Raw Data Analysis (`query_path: raw_analysis`)
-
-Use when the model must decide which events to include, how to define the metric, or what calculation logic to apply. Because the model makes semantic decisions, this path requires a two-stage review gate before execution.
-
-4B. Apply application-specific defaults from `domains/metric-semantics/data-model-protocol.md`.
-5B. Select the data path:
-    - Use the DataFinder OpenAPI module (`domains/datafinder-interface/`) for event analysis DSL, user profiles, behavior flows, user list queries, tags, and export downloads. See "DataFinder OpenAPI module" below. Use `domains/datafinder-interface/openapi-routing.md` for higher-level routing rules.
-    - Use Kafka or exported raw events when the request needs raw event reconstruction, custom identity logic, near-real-time streams, or fields unavailable from OpenAPI. Read `domains/query-execution/protocols/raw-analysis/datafinder-kafka-raw-events.md` first.
-    - Use local CSV/NDJSON files when the user provides extracted data.
-6B. **Subagent Review (automated)**: Spawn a review subagent with the QueryIntent. Read `domains/query-execution/protocols/raw-analysis/review-protocol.md` — Stage 1 — for the full protocol. The subagent validates event semantics, identity key, aggregation logic, filter safety, breakdown validity, and known risks. If the review returns `requires_revision`, revise the QueryIntent and re-run (max 2 retries before escalating to the user). Do not proceed to Step 7B until review status is `approved`.
-7B. **User Review (human confirmation)**: Present a `ReviewCard` to the user. Read `domains/query-execution/protocols/raw-analysis/review-protocol.md` — Stage 2 — for the exact card format. The card shows the calculation formula, event set, time range, applied defaults, and any warnings. **Do not execute anything until the user explicitly confirms.** If the user requests changes, return to Step 3 with the revised intent.
-8B. Convert the confirmed QueryIntent into QueryPlan. Read `domains/query-execution/protocols/raw-analysis/query-plan-protocol.md` and validate shape against `domains/query-execution/protocols/raw-analysis/query-plan.schema.json`.
-9B. Compile QueryPlan into an executable request plan. Read `domains/query-execution/protocols/raw-analysis/compiled-query-protocol.md` and validate shape against `domains/query-execution/protocols/raw-analysis/compiled-query.schema.json`.
-10B. Execute the compiled query and return ExecutionResult. Read `domains/query-execution/protocols/raw-analysis/execution-result-protocol.md` and validate shape against `domains/query-execution/protocols/raw-analysis/execution-result.schema.json`.
-11B. Validate result quality: row count, date coverage, `app_id`, timezone, null identity rate, duplicate rate, and whether server/client time differs materially. Report results with the exact metric definition, query inputs, commands or API path used, and remaining uncertainty.
-
-## Default Metric Policy
-
-- For DAU, default to `count(distinct device_id)` by local day for the application's events.
-- Prefer event occurrence time (`client_ts` in application protocol, mapped into DataFinder event local time / `local_time_ms`) over ingestion time (`server_time`) unless diagnosing delivery delay.
-- Filter to the configured application DataFinder app before aggregating.
-- Treat reporter-service-owned common params as authoritative: `device_id`, `session_id`, `app_version`, `os`.
-- Do not trust renderer-supplied params with the same names; the reporter service strips those before forwarding and injects its own values.
-- Exclude no events by default. If the user asks for "meaningful active users", propose an event include/exclude list and explain the impact before applying it.
-
-## DataFinder OpenAPI module
-
-All DataFinder OpenAPI calls go through the self-contained module at `domains/datafinder-interface/`. It bundles the calling logic, the complete interface definitions, the official doc URLs, and a self-update procedure in one place. Read `domains/datafinder-interface/README.md` for the full interface.
-
-**Discover the interface** (no credentials needed):
+DataFinder CLI（SDK 支撑，发现无需凭据，调用读 `.env.local`）：
 
 ```
-node build/domains/datafinder-interface/cli.js list                 # every endpoint + summary
-node build/domains/datafinder-interface/cli.js describe <endpoint>  # one endpoint's full spec + doc URL
-```
+# 发现接口（带官方文档链接）
+node build/domains/datafinder-interface/cli.js list                # 16 个端点 + 摘要
+node build/domains/datafinder-interface/cli.js describe report.query  # 单端点完整 spec + doc_url
 
-(If `build/` is missing, run `npm run build:tools` at the repo root first.)
-
-`manifest.json` is the canonical, machine-readable definition of every endpoint (method, path, required/optional params, response shape, limits, doc URL).
-
-**Call an endpoint** (reads `.env.local`):
-
-```
+# 调用（读 .env.local 凭据）
 node build/domains/datafinder-interface/cli.js call dashboard.list
-node build/domains/datafinder-interface/cli.js call report.query --params '{"report_id":"…","start_time":"…","end_time":"…"}'
+node build/domains/datafinder-interface/cli.js call report.query --params '{"report_id":"…","count":10}'
 ```
 
-Programmatic use (TypeScript): `import { DataFinderClient, loadConfigFromEnv } from "domains/datafinder-interface/index.js"`.
+（缺 `build/` 先在仓库根 `npm run build:ability`。）
 
-**When an endpoint is missing or its path is unverified**: `call()` on an unknown id returns `error_code: "endpoint_not_in_manifest"`, and entries with `"path_verified": false` emit a warning. In both cases, look up the latest interface in the official docs and extend `manifest.json` following `domains/datafinder-interface/UPDATE.md`. After registration the endpoint is immediately callable. Run this update procedure whenever the docs have changed, a path returns 404, or the user asks to refresh the DataFinder interface.
+程序化用法：`import { dataFinder } from "domains/datafinder-interface/index.js"` → `dataFinder().reports.query({ report_id, count })` / `dataFinder().call(id, params)`；或直接 `@workcortex/datafinder-sdk` 的 `createDataFinderSDK(loadConfigFromEnv(envPath))`。结果统一为 `DfResult`（成功带 `result` 表格/记录，失败带 `code`/`message`/`docUrl`）。
 
-## Configuration
+接口缺失/路径未验证：`call` 未知 id 返回 `endpoint_not_in_manifest`；按 `packages/datafinder-sdk/UPDATE.md` 照官方文档扩 `packages/datafinder-sdk/manifest.json`。新鲜度自检：`npm run check:freshness -w @workcortex/datafinder-sdk`。
 
-OpenAPI credentials and endpoints are intentionally not committed in skill files. They live in `.env.local` at the project root and are loaded by `datafinder.load_config_from_env()`. Ask the user for configuration when it is missing.
+## 能力 A — 看板复用（dashboard）✅
 
-Required config usually includes:
+适用：用户要的是已有看板/报表里的指标（DAU/PV/UV/留存/漏斗等已沉淀的图），或给了 `report_id`/`dashboard_id`。口径由资产自身定义，无需自己造 DSL，最稳。
 
-- DataFinder environment: SaaS cloud-native, SaaS non-cloud-native, BytePlus overseas, or private deployment (`DATAFINDER_ENVIRONMENT`)
-- base URL (`DATAFINDER_BASE_URL`) — see `manifest.json` `global.base_urls` for the per-environment value
-- AK/SK (`DATAFINDER_ACCESS_KEY` / `DATAFINDER_SECRET_KEY`)
-- application `app_id` (`DATAFINDER_APP_ID`) and `DATAFINDER_REGION`
-- optional project/tenant headers for CDP/tag APIs (`DATAFINDER_PROJECT_ID`)
+1. **找资产**：`call dashboard.list` 列看板（含 `dashboard_id`、`app_id`、名称）→ `call dashboard.reports --params '{"dashboard_id":"…"}'` 列报表，拿到目标 `report_id`（按名称匹配，如 "PV & UV"）。
+2. **取数**：`call report.query --params '{"report_id":"…","count":N}'`。真实数据在 `data.dsls[0].data[].data_item_list[]`（每指标一组时间序列，配 `date_index_list`）。SDK/适配层会把它归一化成「date × 各指标」表格。
+3. **解读**：报出资产名、时间范围、各指标数值与口径说明（口径属于资产）。
 
-## Output Rules
+实测：报表 PV&UV（`7649241423115461888`）能稳定返回真实 PV/UV 日序列。
 
-Always include:
+## 能力 B — 自由分析（free analysis）✅
 
-- data source and interface
-- metric definition
-- time range and timezone
-- filters, especially `app_id`
-- validation checks and result caveats
+适用：用户要自定义指标/事件集/拆分维度，没有现成报表能直接答（如"按 provider 拆分某事件的近 7 天人数"）。
 
-When API documentation details matter, link to the official 火山引擎 documentation rather than copying long API specs into the answer.
+1. **接地事件**：用 `call metadata.query --params '{"filter":{},"with":[]}'` 取应用真实事件列表（DataFinder 元数据），只用其中真实存在的 `event_name`，不要臆造。
+2. **构造 DSL**：analysis DSL 结构复杂——**最稳的起手式是借一个相近报表的 `dsl_content` 当模板**：`call report.query`（返回里含该报表的 `dsl_content`），照它改 `periods`（时间/粒度）与 `content.queries`（事件+指标：`event_indicator` 取 `events`=次数 / `event_users`=人数；`event_name` 用真实事件名，如页面访问是 `predefine_pageview`）。`resources`/`version` 沿用模板。
+3. **执行**：`call analysis.query --params '<DSL>'`。
+
+> **请求契约（关键，易错）**：analysis.query 的请求体 = **DSL 字段（`periods`/`content`/`resources`/`version`…）直接铺在顶层**，**不要**包成 `{"dsl":{...}}`。报表的 `dsl_content` 本身就是这个形状，可直接当 params。范围参数 `app_ids`（或 `project_ids`）由 cli/SDK 从 `.env.local` 自动注入，无需手填（要覆盖则显式传 `app_ids`/`project_ids`）。
+>
+> 真因排查：若报 `code=400`，看 SDK 错误里带出的 `errors`（如 `app_ids or project_ids must be provided`、`缺少某些字段 'periods'`）——那才是真原因。实测：用报表 `dsl_content` 直发 analysis.query 可稳定返回真实日序列。
+
+## "为什么变了"——归因（可选）
+
+用户问 **why**（"DAU 为什么跌"）而非 what 时，走确定性分析引擎 `domains/analysis-engine/`（数据可信度门 → 异常确认 → 贡献度分解 → 下钻），见 `domains/analysis-engine/README.md` 与 `playbooks/rca-anomaly.yaml`。引擎经 DataFinder 取数（analysis.query 已可用）。
+
+## 默认口径
+
+- DAU 默认 `count(distinct device_id)` 按本地日；优先事件发生时间而非入库时间。
+- 聚合前先按配置的 app 过滤。
+- 公共参数 `device_id`/`session_id`/`app_version`/`os` 以上报服务为准。
+- 默认不排除任何事件；若用户要"有意义的活跃"，先提排除清单并说明影响再应用。
+
+## 配置
+
+凭据不入库，放 ability 根 `.env.local`，由适配层注入：`DATAFINDER_BASE_URL` / `DATAFINDER_ACCESS_KEY` / `DATAFINDER_SECRET_KEY` / `DATAFINDER_APP_ID`（可选 `DATAFINDER_PROJECT_ID`/`DATAFINDER_REGION`/`DATAFINDER_SERVICE`）。缺失时向用户索要。
+
+## 输出规约
+
+每次答复包含：数据来源与接口、指标定义/口径、时间范围与时区、过滤（尤其 `app_id`）、校验与结果注意点。需要接口细节时给官方文档链接（`describe <id>` 的 doc_url），不要把长 API 规格抄进答复。

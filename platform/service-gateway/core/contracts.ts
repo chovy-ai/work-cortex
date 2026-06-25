@@ -87,6 +87,16 @@ export interface ConnectorPort {
   react?(conversation: Conversation, emojiType: string): Promise<string | null>;
   /** 可选：撤掉之前贴的表情回应（handle 来自 react 返回值）。 */
   unreact?(conversation: Conversation, handle: string): Promise<void>;
+  /**
+   * 可选：发一条带按钮的交互卡片（人在环 gate）。按钮点击经渠道回调译回 kind:"action"
+   * 的 Envelope（携带 run_id + action_id）。不支持的渠道不实现，core 自动降级为文本 + 打字回复。
+   */
+  sendActionCard?(
+    conversation: Conversation,
+    runId: string,
+    prompt: string,
+    actions: { label: string; action_id: "confirm" | "revise" | "cancel" }[],
+  ): Promise<void>;
 }
 
 export function encodeConversationRef(channel: string, conversation: Conversation): string {

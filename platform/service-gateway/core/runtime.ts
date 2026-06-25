@@ -103,7 +103,9 @@ export class Runtime {
         controller.abort();
         return;
       }
-      if (ev.kind === "result" || ev.kind === "error") terminal = true;
+      // ask 也终结本轮 turn：runner emit ask 后即返回，run 挂起等用户回复（经新 run 的 resume 续跑）。
+      // 不标终态会被下面「未产出终态」逻辑误判为失败。
+      if (ev.kind === "result" || ev.kind === "error" || ev.kind === "ask") terminal = true;
       persist(ev);
       onEvent(ev);
     };

@@ -14,7 +14,8 @@
     "@zed-industries/agent-client-protocol": "^0.4.5",
     "@zed-industries/claude-code-acp": "^0.16.2",
     "ajv": "^8.17.1",
-    "ajv-formats": "^3.0.1"
+    "ajv-formats": "^3.0.1",
+    "atomic-abilities": "*"
   },
   "devDependencies": {
     "@types/node": "^20.14.0",

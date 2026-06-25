@@ -9,10 +9,12 @@
     "platform/service-gateway"
   ],
   "scripts": {
+    "build:sdk": "npm run build -w @workcortex/datafinder-sdk",
+    "build:query": "npm run build -w @workcortex/analytics-query",
     "build:atomic": "npm run build -w atomic-abilities",
     "build:ability": "npm run build:tools -w data-analysis-tools",
     "build:gateway": "npm run build -w service-gateway",
-    "build": "npm run build:atomic && npm run build:ability && npm run build:gateway",
+    "build": "npm run build:sdk && npm run build:query && npm run build:atomic && npm run build:ability && npm run build:gateway",
     "test:ability": "npm run test:tools -w data-analysis-tools",
     "test:gateway": "npm run test -w service-gateway",
     "test": "npm run test:ability && npm run test:gateway",

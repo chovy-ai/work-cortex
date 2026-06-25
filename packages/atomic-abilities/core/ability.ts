@@ -46,10 +46,10 @@ export interface DeclSpec<In, Out> {
   verifyOutput?: (out: Out, ctx: AbilityCtx) => string | null;
 }
 
-// 运行位置 dist/core/ → 包根 atomic-abilities/ → 仓库根
+// 运行位置 dist/core/ → 包根 packages/atomic-abilities/ → packages/ → 仓库根
 const HERE = dirname(fileURLToPath(import.meta.url));
 const PKG_ROOT = resolve(HERE, "..", "..");
-const REPO_ROOT = resolve(PKG_ROOT, "..");
+const REPO_ROOT = resolve(PKG_ROOT, "..", "..");
 const BACKENDS_DIR = join(PKG_ROOT, "backends");
 
 const ajv = new Ajv2020.default({ allErrors: true, strict: false });

@@ -17,7 +17,8 @@ function resolvePath(p: string): string {
 // Compiled file lives at build/domains/knowledge-update/check_capabilities_sync.js;
 // repo root is 3 levels above its directory (one more than the .py original).
 const ROOT = path.resolve(path.dirname(resolvePath(fileURLToPath(import.meta.url))), "..", "..", "..");
-const MANIFEST = path.join(ROOT, "domains", "datafinder-interface", "manifest.json");
+// manifest 已抽离到独立包 @workcortex/datafinder-sdk（单一真源），跨包引用其 manifest。
+const MANIFEST = path.join(ROOT, "..", "..", "packages", "datafinder-sdk", "manifest.json");
 const CAPABILITIES = path.join(ROOT, "domains", "intent-routing", "capabilities.json");
 
 function load(p: string): Record<string, any> {

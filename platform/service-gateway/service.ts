@@ -11,33 +11,33 @@ import { startLarkListener } from "./connectors/lark/listener.js";
 import { LarkSender } from "./connectors/lark/sender.js";
 import { ConsoleSender } from "./connectors/console/sender.js";
 import { startConsoleHttp, type ConsoleHttpHandle } from "./connectors/console/http.js";
-import { createAcpRunner } from "./capabilities/data-analysis/runner.js";
+import { createSkillRunner } from "./capabilities/data-analysis/runner.js";
+import { SessionStore } from "./capabilities/data-analysis/session-store.js";
 
 const execFileP = promisify(execFile);
 
 // dist/service.js → 包根（platform/service-gateway）→ platform → 仓库根
 const sgRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const repoRoot = resolve(sgRoot, "..", "..");
-// 分析能力本体：agent 工作目录，outputs/ 与 knowledge-store/ 都在这里
+// 分析能力本体：skill agent 的工作目录（含 skills/、.env.local、outputs/）
 const abilityRoot = join(repoRoot, "abilities", "data-analysis");
 
 interface Config {
   runtime: { maxConcurrent: number; timeoutSec: number; graceSec: number };
   queue: { maxSize: number; dedupCapacity: number };
   sessions: { pendingPerConversation: number; terminalKeep: number };
-  capability: { id: string; runtime: { agent: string; cmd: string; args: string[] } };
+  capability: { id: string };
   lark: { bin: string; subscribeArgs: string[] };
   console: { enabled: boolean; host: string; port: number };
   log: { level: LogLevel };
 }
 
 const DEFAULTS: Config = {
-  runtime: { maxConcurrent: 1, timeoutSec: 600, graceSec: 10 },
+  runtime: { maxConcurrent: 5, timeoutSec: 600, graceSec: 10 },
   queue: { maxSize: 1000, dedupCapacity: 4096 },
   sessions: { pendingPerConversation: 10, terminalKeep: 512 },
-  // cmd 含 "/" 时按相对 sgRoot 解析；默认用本地安装的官方适配器（npx 会误拉 registry 上的同名废弃包）
-  capability: { id: "data-analysis", runtime: { agent: "claude-code", cmd: "node_modules/.bin/claude-code-acp", args: [] } },
-  lark: { bin: "lark-cli", subscribeArgs: ["event", "+subscribe", "--as", "bot", "--event-types", "im.message.receive_v1", "--quiet"] },
+  capability: { id: "data-analysis" },
+  lark: { bin: "lark-cli", subscribeArgs: ["event", "+subscribe", "--as", "bot", "--event-types", "im.message.receive_v1,card.action.trigger", "--quiet"] },
   // 控制台入站：本机回环 HTTP，供 gateway-console GUI 直接提交查询（结果走文件系统呈现）
   console: { enabled: true, host: "127.0.0.1", port: 8765 },
   log: { level: "info" },
@@ -77,14 +77,8 @@ async function preflight(cfg: Config, log: ReturnType<typeof createLogger>): Pro
   } catch (err) {
     fail(`outputs/ 不可写：${String(err)}`, "检查仓库目录权限");
   }
-
-  // 知识库存在（M0 知识更新是手动前置）
-  if (!existsSync(join(abilityRoot, "knowledge-store", "event-catalog.json"))) {
-    fail(
-      "knowledge-store/event-catalog.json 缺失",
-      "先跑知识更新：domains/event-knowledge 的 sync + extract（见 ARCHITECTURE.md）",
-    );
-  }
+  // 注：旧数据分析链路（query-execution + scheduler + event-catalog 前置）已移除，
+  // 新链路（@workcortex/analytics-query）重建中、尚未接入，故此处不再预检分析就绪。
 
   // lark-cli 可用。M0 全链路用 bot 身份，因此只硬性要求 app 凭据与端点可达；
   // 用户 token 过期（token_local）只警告——它不影响 bot 收发，doctor 却会因此非零退出。
@@ -128,19 +122,10 @@ async function main(): Promise<void> {
   const queue = new EnvelopeQueue(cfg.queue, log);
   const sender = new LarkSender({ bin: cfg.lark.bin, log });
   const consoleSender = new ConsoleSender(log);
-  // ACP 适配器 bin：cmd 含 "/" 时按相对路径解析。npm workspaces 会把依赖提升到仓库根，
-  // 独立安装则落在包内，故 sgRoot / repoRoot 两处候选取先命中者（都不存在时退回 sgRoot 解析以报错清晰）。
-  let rtCmd = cfg.capability.runtime.cmd;
-  if (rtCmd.includes("/")) {
-    const candidates = [resolve(sgRoot, rtCmd), resolve(repoRoot, rtCmd)];
-    rtCmd = candidates.find((p) => existsSync(p)) ?? candidates[0];
-  }
-  const runner = createAcpRunner({
-    cmd: rtCmd,
-    args: cfg.capability.runtime.args,
-    cwd: abilityRoot,
-    log,
-  });
+  // 数据分析能力：skill 驱动 —— 每条消息拉一次性 ACP agent 读 data-analytics SKILL + 本会话历史，
+  // 在能力工作目录用 datafinder cli 自取数据并产出结论。会话历史按 convKey 聚合提供上下文。
+  const sessionStore = new SessionStore({ maxTurns: 8, maxSessions: 200, idleMs: 30 * 60_000 });
+  const runner = createSkillRunner({ abilityRoot, abilityRelCwd: "abilities/data-analysis", sessions: sessionStore, log });
   let sessions: Sessions;
   const runtime = new Runtime({
     maxConcurrent: cfg.runtime.maxConcurrent,

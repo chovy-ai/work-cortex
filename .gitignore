@@ -1,17 +1,16 @@
 # 凭据 / 本地配置（深度无关，任意层级匹配）
 .env.local
-app.config.json
 *.local.env
 .DS_Store
 .claude/*.local.json
 node_modules/
 build/
 
-# 能力本体：知识存储与运行产物（接缝，gitignored）
-abilities/data-analysis/knowledge-store/*
-!abilities/data-analysis/knowledge-store/.gitkeep
+# 能力本体：运行产物（接缝，gitignored）
 abilities/data-analysis/outputs/*
 !abilities/data-analysis/outputs/.gitkeep
+# 误落在仓库根的运行产物（agent cwd 偏差时产生）
+/outputs/
 
 # 平台：service-gateway 本地构建/配置
 platform/service-gateway/node_modules/

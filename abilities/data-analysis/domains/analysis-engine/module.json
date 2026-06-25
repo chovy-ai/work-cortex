@@ -1,0 +1,17 @@
+{
+  "id": "analysis-engine",
+  "description": "确定性分析方法论引擎 + LLM 决策钩子（贡献度分解 / 异常检测 / 数据可信度门 / RCA 编排）",
+  "truth_source": "分析师方法论（本仓库自有），playbook 声明在 playbooks/*.yaml",
+  "serves": [
+    "domains/analysis-engine/playbooks/rca-anomaly.yaml"
+  ],
+  "update": {
+    "type": "agent",
+    "procedure": "domains/analysis-engine/README.md"
+  },
+  "check": {
+    "type": "script",
+    "cmd": "node --test build/tests/analysis-engine.test.js",
+    "stale_signal": "新增/修改 playbook 后单测未覆盖，或贡献度/异常算法改动未回归"
+  }
+}

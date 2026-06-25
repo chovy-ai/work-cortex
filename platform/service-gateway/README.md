@@ -6,9 +6,8 @@
 
 1. Node ≥ 20；`npm install`
 2. lark-cli 已配置 bot 凭据（`lark-cli doctor` 通过）
-3. claude code 已登录（ACP 适配器 `claude-code-acp` 会拉起它）
-4. 知识库已生成：`knowledge-store/event-catalog.json` 存在（见 ARCHITECTURE.md Phase 0）
-5. `.env.local`（DataFinder 凭据）在仓库根
+3. claude code 已登录（ACP 适配器 `claude-code-acp` 会拉起它，skill 驱动分析）
+4. `.env.local`（DataFinder 凭据）在 `abilities/data-analysis/`
 
 ## 运行
 

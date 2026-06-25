@@ -8,6 +8,7 @@ export { imageGenerate } from "./abilities/image-generate/index.js";
 export type { ImageGenerateInput, ImageGenerateOutput, GeneratedImage } from "./abilities/image-generate/index.js";
 
 export { runStructured, type RunStructuredOpts } from "./core/structured.js";
+export { runAgentText, type RunAgentTextOpts } from "./core/agent.js";
 
 export type { AbilityOpts, AbilityFn, AbilityMeta, AbilityCtx } from "./core/ability.js";
 export { createRegistry, type AbilityRegistry } from "./core/registry.js";

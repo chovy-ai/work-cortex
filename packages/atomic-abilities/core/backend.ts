@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { Readable, Writable } from "node:stream";
 import {
@@ -51,9 +52,19 @@ export async function openBackendSession(backend: BackendDecl, opts: OpenOpts): 
   const env = { ...process.env };
   for (const k of backend.env_strip ?? []) delete env[k];
 
-  const cmd = backend.cmd.includes("/") ? resolve(opts.pkgRoot, backend.cmd) : backend.cmd;
+  const cmd = backend.cmd.includes("/") ? resolveLocalBin(opts, backend.cmd) : backend.cmd;
   const cwd = resolve(opts.repoRoot, backend.cwd ?? ".");
   const child = spawn(cmd, backend.args ?? [], { cwd, stdio: ["pipe", "pipe", "pipe"], env });
+
+  // spawn 的 'error'（如二进制不存在的 ENOENT）是异步事件；没有监听器会升级为
+  // uncaughtException 拖垮常驻网关进程。挂一个 reject 的 promise，让启动期失败
+  // 走下方 try/catch 收敛成 AbilityRuntimeError（仅这一条 run 失败，进程存活）。
+  const spawnFailed = new Promise<never>((_, reject) => {
+    child.once("error", (err) =>
+      reject(new AbilityRuntimeError(`backend ${backend.id} 进程启动失败：${fmtErr(err)}`)),
+    );
+  });
+  spawnFailed.catch(() => {}); // 会话建立后子进程再 error 时，避免 unhandledRejection
 
   // 只保留「最后一次工具调用之后」的消息段作为最终回复
   let segmentText = "";
@@ -100,11 +111,14 @@ export async function openBackendSession(backend: BackendDecl, opts: OpenOpts): 
   signal.addEventListener("abort", onAbort, { once: true });
 
   try {
-    await conn.initialize({
-      protocolVersion: PROTOCOL_VERSION,
-      clientCapabilities: { fs: { readTextFile: false, writeTextFile: false } },
-    });
-    const session = await conn.newSession({ cwd, mcpServers: [] });
+    await Promise.race([
+      conn.initialize({
+        protocolVersion: PROTOCOL_VERSION,
+        clientCapabilities: { fs: { readTextFile: false, writeTextFile: false } },
+      }),
+      spawnFailed,
+    ]);
+    const session = await Promise.race([conn.newSession({ cwd, mcpServers: [] }), spawnFailed]);
     sessionId = session.sessionId;
   } catch (err) {
     signal.removeEventListener("abort", onAbort);
@@ -132,4 +146,17 @@ export async function openBackendSession(backend: BackendDecl, opts: OpenOpts): 
 
 function fmtErr(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
+}
+
+/**
+ * 含 "/" 的 cmd 优先按包根解析；但 npm workspace 常把依赖的二进制提升到仓库根的
+ * node_modules/.bin，包根下并不存在。包根找不到时回退仓库根；两处都没有则返回
+ * 包根路径，交给 spawn 报清晰的 ENOENT。
+ */
+function resolveLocalBin(opts: OpenOpts, rel: string): string {
+  const atPkg = resolve(opts.pkgRoot, rel);
+  if (existsSync(atPkg)) return atPkg;
+  const atRepo = resolve(opts.repoRoot, rel);
+  if (existsSync(atRepo)) return atRepo;
+  return atPkg;
 }

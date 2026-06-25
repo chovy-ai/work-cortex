@@ -1,6 +1,6 @@
 {
   "runtime": {
-    "maxConcurrent": 1,
+    "maxConcurrent": 5,
     "timeoutSec": 600,
     "graceSec": 10
   },
@@ -28,7 +28,7 @@
       "--as",
       "bot",
       "--event-types",
-      "im.message.receive_v1",
+      "im.message.receive_v1,card.action.trigger",
       "--quiet"
     ]
   },

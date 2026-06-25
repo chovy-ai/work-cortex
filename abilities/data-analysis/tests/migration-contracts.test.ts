@@ -5,8 +5,6 @@ import * as path from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 
-import { SchedulerState, StepOutcome } from "../domains/query-execution/scheduler/scheduler.js";
-
 // Compiled location: build/tests/migration-contracts.test.js — the repo root
 // is two levels up from this file.
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -16,48 +14,12 @@ function load_json(rel_path: string): Record<string, any> {
   return JSON.parse(readFileSync(path.join(ROOT, rel_path), "utf-8"));
 }
 
-test("test_domain_module_contracts_exist", async (t) => {
-  const modules: Record<string, string> = {
-    "domains/event-knowledge/module.json": "event-knowledge",
-    "domains/datafinder-interface/module.json": "datafinder-interface",
-    "domains/metric-semantics/module.json": "metric-semantics",
-  };
-
-  for (const [rel_path, expected_id] of Object.entries(modules)) {
-    await t.test(`rel_path=${rel_path}`, () => {
-      const module = load_json(rel_path);
-      assert.equal(module["id"], expected_id);
-      assert.ok("update" in module);
-      assert.ok("check" in module);
-      assert.ok("serves" in module);
-    });
-  }
-});
-
 test("test_target_files_exist_and_legacy_files_are_removed", async (t) => {
   const expected_files = [
-    "domains/event-knowledge/sync_app.sh",
-    "domains/event-knowledge/extract_events.ts",
-    "domains/datafinder-interface/client.ts",
     "domains/datafinder-interface/cli.ts",
-    "domains/datafinder-interface/manifest.json",
-    "domains/datafinder-interface/UPDATE.md",
-    "domains/datafinder-interface/README.md",
-    "domains/datafinder-interface/openapi-routing.md",
-    "domains/metric-semantics/data-model-protocol.md",
-    "domains/metric-semantics/extract_data_model.ts",
     "domains/intent-routing/capabilities.json",
     "domains/intent-routing/capability-inventory.md",
-    "domains/intent-routing/query-intent-protocol.md",
-    "domains/intent-routing/query-intent.schema.json",
-    "domains/query-execution/executors/kafka_executor.ts",
-    "domains/query-execution/executors/local_executor.ts",
-    "domains/query-execution/scheduler/workflow.json",
-    "domains/query-execution/scheduler/scheduler.ts",
-    "domains/knowledge-update/update_knowledge.ts",
-    "domains/knowledge-update/check_freshness.ts",
     "domains/knowledge-update/check_capabilities_sync.ts",
-    "knowledge-store/.gitkeep",
     "outputs/.gitkeep",
   ];
   for (const rel_path of expected_files) {
@@ -81,23 +43,9 @@ test("test_target_files_exist_and_legacy_files_are_removed", async (t) => {
   }
 });
 
-test("test_event_extractor_uses_new_store_paths", () => {
-  const source = readFileSync(path.join(ROOT, "domains/event-knowledge/extract_events.ts"), "utf-8");
-  // Output path is now config-driven via app.config.json (output.eventCatalog),
-  // resolved through the central loader instead of a hardcoded string.
-  assert.ok(source.includes("resolveOutput(CONFIG.output.eventCatalog"));
-  assert.ok(!source.includes("SKILL_ROOT"));
-
-  // The configured output still lands under knowledge-store/ — the guarantee
-  // the original assertion was protecting. Read the committed template
-  // (app.config.json is gitignored / local-only).
-  const appConfig = load_json("app.config.example.json");
-  assert.equal(appConfig["output"]["eventCatalog"], "knowledge-store/event-catalog.json");
-  assert.equal(appConfig["output"]["dataModel"], "knowledge-store/data-model.json");
-});
-
 test("test_datafinder_manifest_is_verified_and_cli_lists_without_legacy_package", async (t) => {
-  const manifest = load_json("domains/datafinder-interface/manifest.json");
+  // manifest 已抽离到独立包 @workcortex/datafinder-sdk（单一真源）。
+  const manifest = load_json("../../packages/datafinder-sdk/manifest.json");
   assert.ok(manifest["last_verified_against_docs_at"]);
   const unverified = (manifest["endpoints"] as Record<string, any>[])
     .filter((ep) => !ep["path_verified"])
@@ -139,7 +87,7 @@ test("test_datafinder_manifest_is_verified_and_cli_lists_without_legacy_package"
 });
 
 test("test_datafinder_client_prepares_path_query_header_and_body_params", async () => {
-  const { DataFinderClient } = await import("../domains/datafinder-interface/client.js");
+  const { DataFinderClient } = await import("@workcortex/datafinder-sdk");
   const client = new DataFinderClient({
     base_url: "https://analytics.volcengineapi.com",
     access_key: "ak",
@@ -187,12 +135,3 @@ test("test_capabilities_are_in_sync_with_manifest", () => {
   assert.ok(result.stdout.includes("capabilities sync: ok"));
 });
 
-test("test_scheduler_persists_awaiting_state", () => {
-  const ctx: Record<string, any> = { run_id: "contract-test", query_path: "raw_analysis" };
-  const outcome = StepOutcome.await_input("user_review", { review_card: "confirm" });
-  assert.equal(outcome.status, "await_input");
-  const state = new SchedulerState({ run_id: ctx["run_id"], current_step: "user_review", context: ctx });
-  state.apply(outcome);
-  assert.equal(state.status, "awaiting_input");
-  assert.equal(state.awaiting_step, "user_review");
-});

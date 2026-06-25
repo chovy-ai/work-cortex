@@ -1,254 +1,95 @@
-import { spawn } from "node:child_process";
 import { readFileSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
-import { Readable, Writable } from "node:stream";
-import {
-  ClientSideConnection,
-  PROTOCOL_VERSION,
-  ndJsonStream,
-  type Client,
-  type RequestPermissionRequest,
-  type RequestPermissionResponse,
-  type SessionNotification,
-} from "@zed-industries/agent-client-protocol";
-import type { RunnerFn, Task, TaskEventDraft } from "../../core/contracts.js";
+import { join } from "node:path";
+import { runAgentText } from "atomic-abilities";
+import { decodeConversationRef, type RunnerFn, type Task, type TaskEventDraft } from "../../core/contracts.js";
 import type { Logger } from "../../core/log.js";
+import type { SessionStore, Turn } from "./session-store.js";
 
-export interface AcpRunnerOpts {
-  cmd: string; // ACP 适配器命令，如 "npx"
-  args: string[]; // 如 ["claude-code-acp"]
-  cwd: string; // 仓库根（agent 工作目录）
+export interface SkillRunnerOpts {
+  /** 分析能力本体根目录（含 build/、skills/、.env.local）。 */
+  abilityRoot: string;
+  /** agent 工作目录，相对仓库根（agent 在此跑 cli、读 .env.local）。 */
+  abilityRelCwd: string;
+  /** 会话历史存储（按会话提供上下文）。 */
+  sessions: SessionStore;
   log: Logger;
 }
 
 /**
- * 06 · data-analysis 能力薄壳：每个 run 拉起一个 ACP agent 子进程，
- * 组装提示词 → session/prompt → 流式更新翻译为 progress / 最终回复累积为 result。
- * 权限完全开放（request_permission 一律允许）。signal → session/cancel + 终止子进程。
+ * 06 · data-analysis 能力：skill 驱动 + 会话上下文。
+ *
+ * 每条消息起一次性 ACP agent（不长活），喂它 data-analytics SKILL + 本会话历史 + 当前问题；
+ * agent 在能力工作目录里用 datafinder cli 自取数据、产出结论。同一会话（convKey=channel:chat:thread）
+ * 的历史被回放进 prompt，故追问能带上下文；新会话从空历史开始。
  */
-export function createAcpRunner(opts: AcpRunnerOpts): RunnerFn {
+export function createSkillRunner(opts: SkillRunnerOpts): RunnerFn {
+  const { abilityRoot, abilityRelCwd, sessions, log } = opts;
+  let skill = "";
+  try {
+    skill = readFileSync(join(abilityRoot, "skills", "data-analytics", "SKILL.md"), "utf-8");
+  } catch (err) {
+    log("warn", "runner.skill", "SKILL.md 读取失败（agent 将无技能上下文）", { error: String(err).slice(0, 200) });
+  }
+
   return async (task: Task, emit: (d: TaskEventDraft) => void, signal: AbortSignal): Promise<void> => {
-    const { log } = opts;
     if (signal.aborted) return;
+    emit({ kind: "progress", status: "正在分析…" });
 
-    // 剥掉 Claude Code 会话标记：开发期 gateway 可能本身跑在 Claude Code 里，
-    // 适配器有嵌套会话检查；生产（launchd）环境本就没有这些变量
-    const env = { ...process.env };
-    delete env.CLAUDECODE;
-    delete env.CLAUDE_CODE_ENTRYPOINT;
-    const child = spawn(opts.cmd, opts.args, {
-      cwd: opts.cwd,
-      stdio: ["pipe", "pipe", "pipe"],
-      env,
-    });
-    child.stderr?.on("data", (d: Buffer) => {
-      const s = d.toString().trim();
-      if (s) log("debug", "runner.acp", "adapter stderr", { run_id: task.run_id, stderr: s.slice(0, 300) });
-    });
-
-    // 只保留「最后一次工具调用之后」的消息段作为最终回复——claude code 在
-    // 工具调用之间也会流式输出旁白，整段累积会把执行过程当成答案发出去
-    let segmentText = "";
-
-    const client: Client = {
-      async requestPermission(p: RequestPermissionRequest): Promise<RequestPermissionResponse> {
-        // 权限完全开放：优先 allow_always，其次 allow_once
-        const opt =
-          p.options.find((o) => o.kind === "allow_always") ??
-          p.options.find((o) => o.kind === "allow_once") ??
-          p.options[0];
-        log("debug", "runner.acp", "permission auto-allowed", { run_id: task.run_id, option: opt?.optionId });
-        if (!opt) return { outcome: { outcome: "cancelled" } };
-        return { outcome: { outcome: "selected", optionId: opt.optionId } };
-      },
-      async sessionUpdate(n: SessionNotification): Promise<void> {
-        try {
-          const u = n.update;
-          if (u.sessionUpdate === "agent_message_chunk" && u.content.type === "text") {
-            segmentText += u.content.text;
-          } else if (u.sessionUpdate === "tool_call") {
-            // 进度要讲清「在干嘛 + 目的」（用户反馈，2026-06-12）：优先用 agent 调工具前的
-            // 旁白（buildPrompt 已要求它一句中文说明意图），没有旁白才退回 kind 兜底文案；
-            // 不暴露命令/路径，原始 title 留 debug 日志排查用
-            const narration = narrationToProgress(segmentText);
-            segmentText = ""; // 工具调用开始 → 之前的文本是旁白，重开一段
-            const { title, kind } = u as { title?: string; kind?: string | null };
-            log("debug", "runner.acp", "tool call", { run_id: task.run_id, title: (title ?? "").slice(0, 200) });
-            // status 给 IM（叙述，不暴露命令/路径）；detail 留原始 title 给控制台看原始内容
-            const raw = title?.trim();
-            emit({
-              kind: "progress",
-              status: narration ?? describeToolKind(kind),
-              ...(raw ? { detail: raw } : {}),
-            });
-          }
-          // plan / available_commands_update / current_mode_update 等其余更新：忽略
-        } catch (err) {
-          log("warn", "runner.acp", "sessionUpdate handler error (ignored)", {
-            run_id: task.run_id,
-            error: String(err).slice(0, 200),
-          });
-        }
-      },
-    };
-
-    const stream = ndJsonStream(
-      Writable.toWeb(child.stdin!) as WritableStream<Uint8Array>,
-      Readable.toWeb(child.stdout!) as ReadableStream<Uint8Array>,
-    );
-    const conn = new ClientSideConnection(() => client, stream);
-
-    const killChild = (): void => {
-      if (child.exitCode === null) {
-        child.kill("SIGTERM");
-        setTimeout(() => {
-          if (child.exitCode === null) child.kill("SIGKILL");
-        }, 3000).unref();
-      }
-    };
-
-    let sessionId: string | null = null;
-    const onAbort = (): void => {
-      log("info", "runner.acp", "cancel requested", { run_id: task.run_id });
-      if (sessionId) void conn.cancel({ sessionId }).catch(() => {});
-      // 协作取消给 2s，随后强制终止子进程
-      setTimeout(killChild, 2000).unref();
-    };
-    signal.addEventListener("abort", onAbort, { once: true });
-
+    const key = sessionKey(task);
+    const history = key ? sessions.history(key) : [];
+    const prompt = buildPrompt(skill, history, task.input.text);
     try {
-      await conn.initialize({
-        protocolVersion: PROTOCOL_VERSION,
-        clientCapabilities: { fs: { readTextFile: false, writeTextFile: false } },
+      const answer = await runAgentText({
+        prompt,
+        cwd: abilityRelCwd,
+        signal,
+        timeoutMs: task.limits.timeout_s * 1000,
       });
-      const session = await conn.newSession({ cwd: opts.cwd, mcpServers: [] });
-      sessionId = session.sessionId;
-      emit({ kind: "progress", status: "正在分析…" });
-
-      const resp = await conn.prompt({
-        sessionId,
-        prompt: [{ type: "text", text: buildPrompt(task) }],
-      });
-
-      if (signal.aborted || resp.stopReason === "cancelled") {
-        return; // 终态由 05 runtime 补 synthetic error
-      }
-      if (resp.stopReason !== "end_turn") {
-        emit({ kind: "error", reason: `agent 异常终止（${resp.stopReason}）`, retriable: false });
-        return;
-      }
-      const summary = segmentText.trim();
-      if (!summary) {
-        emit({ kind: "error", reason: "agent 未产出回复内容", retriable: false });
-        return;
-      }
-      emit({
-        kind: "result",
-        summary,
-        tables: [], // M0：最终回复即结果，不做结构化拆分
-        charts: [],
-        artifacts_dir: `outputs/${task.run_id}`,
-      });
-    } finally {
-      signal.removeEventListener("abort", onAbort);
-      killChild();
+      if (signal.aborted) return; // 终态由 runtime 补
+      const text = answer.trim() || "（分析完成，但没有产出可读结论）";
+      if (key) sessions.append(key, task.input.text, text);
+      emit({ kind: "result", summary: text, tables: [], charts: [] });
+    } catch (err) {
+      log("error", "runner.skill", "agent 执行失败", { run_id: task.run_id, error: String(err).slice(0, 300) });
+      emit({ kind: "error", reason: `分析失败：${truncate(String(err), 200)}`, retriable: false });
     }
   };
 }
 
-/**
- * 工具调用前的旁白 → 进度文案：取最后一个非空行（最贴近本次调用的意图），
- * 去掉 markdown 修饰，超长截断。旁白含代码块/命令痕迹时放弃，避免把执行细节漏给用户。
- */
-function narrationToProgress(text: string): string | null {
-  const line =
-    text
-      .trim()
-      .split("\n")
-      .map((s) => s.replace(/^[#>*\-\d.、\s]+/, "").trim())
-      .filter(Boolean)
-      .pop() ?? "";
-  if (!line || line.includes("`") || line.includes("/")) return null;
-  return line.length > 60 ? `${line.slice(0, 60)}…` : line;
-}
-
-/** ACP ToolKind → 进度兜底文案（agent 没给旁白时用；sessions 侧 30s 节流） */
-function describeToolKind(kind: string | null | undefined): string {
-  switch (kind) {
-    case "read":
-      return "查看数据文件";
-    case "execute":
-      return "执行数据查询";
-    case "search":
-      return "检索相关数据";
-    case "fetch":
-      return "获取数据";
-    case "think":
-      return "梳理分析思路";
-    case "edit":
-    case "delete":
-    case "move":
-      return "整理输出";
-    default:
-      return "处理中";
-  }
-}
-
-// persona.md 与源码同目录（不参与编译），每次 run 现读——调性格改文件即可，无需重建
-const PERSONA_PATH = join(
-  resolve(dirname(fileURLToPath(import.meta.url)), "..", "..", ".."),
-  "capabilities",
-  "data-analysis",
-  "persona.md",
-);
-
-const EMOJI_LEARNED_PATH = join(dirname(PERSONA_PATH), "emoji-learned.md");
-
-function loadPersona(): string {
-  let text = "";
+/** 会话键 = channel:chat:thread（与 sessions 的 convKey 一致）；解码失败返回 null。 */
+function sessionKey(task: Task): string | null {
   try {
-    text = readFileSync(PERSONA_PATH, "utf-8").trim();
+    const { channel, conversation } = decodeConversationRef(task.context.conversation_ref);
+    return `${channel}:${conversation.id}:${conversation.thread_id ?? ""}`;
   } catch {
-    return ""; // persona 缺失不挡执行
+    return null;
   }
-  try {
-    // 机器沉淀的表情用法（learn_emoji 工具产出）存在时自动追加
-    text += "\n\n" + readFileSync(EMOJI_LEARNED_PATH, "utf-8").trim();
-  } catch {
-    /* 还没沉淀过，正常 */
-  }
-  return text;
 }
 
-function buildPrompt(task: Task): string {
-  return [
-    loadPersona(),
+function buildPrompt(skill: string, history: Turn[], query: string): string {
+  const lines = [
+    "你是数据分析助手。下面是你的技能说明（SKILL），请严格据此回答用户问题。",
+    "你可以用 Bash 运行 SKILL 中的 datafinder cli（如 node build/domains/datafinder-interface/cli.js list / describe <id> / call <id> --params '...'），凭据已在工作目录的 .env.local。",
     "",
-    "你是数据分析执行器，按 skills/data-analytics/SKILL.md 工作。",
-    "本次只允许走 dashboard 路径（已有报表查询）；禁止 raw_analysis。",
+    "[SKILL]",
+    skill,
+  ];
+  if (history.length) {
+    lines.push("", "[本会话历史]（你与用户的前几轮，供理解追问；只作上下文，不要重复回答）：");
+    for (const t of history) {
+      lines.push(`用户：${t.user}`, `助手：${truncate(t.assistant, 600)}`);
+    }
+  }
+  lines.push(
     "",
-    "硬性约束（违反任何一条都是错误）：",
-    "- 数据查询只能用仓库既有工具（node build/domains/datafinder-interface/cli.js …，凭据在 .env.local；build/ 缺失先 npm run build:tools）；",
-    "- 禁止安装任何依赖（pip / npm）；禁止访问外部网页或在线文档；",
-    "- 工具调用失败或数据不可得时：立即停止尝试，不要修环境、不要查文档、不要换方案，",
-    "  直接按下述格式回复「无法回答 + 具体失败原因」。快速诚实的失败远好于长时间无响应；",
-    "- 总预算约 8 分钟，超时会被强制终止，用户只会看到一条超时报错。",
+    "[当前问题]",
+    query,
     "",
-    "执行过程对提问者可见：每次调用工具之前，先单独输出一句简短中文旁白（20 字以内），",
-    "说明接下来这一步在做什么、目的是什么（如「查指标口径，确认渗透率怎么算」）；",
-    "旁白里禁止出现命令、代码、文件路径或英文术语。",
-    "",
-    "你的最终回复将被原样发给飞书提问者，要求：",
-    "- 用中文回复，面向业务同学（不是工程师）；",
-    "- 最后一条消息必须是纯回复：第一个字就是结论，禁止先写分析过程、数据提取笔记或任何英文思考再给答案；",
-    "- 结论先行（一句话）→ 关键数字（markdown 表格）→ 简短口径说明；",
-    "- 不要包含执行过程叙述、工具调用细节或代码。",
-    "",
-    `如需写文件，放在 outputs/${task.run_id}/ 目录下；`,
-    `严禁创建或修改 outputs/${task.run_id}/.gateway/（网关审计目录）。`,
-    "",
-    "[用户问题]",
-    task.input.text,
-  ].join("\n");
+    "[输出要求] 最终只输出面向用户的中文结论：含关键数值、数据来源/口径、时间范围与必要注意点；不要输出执行过程旁白。若是承接上文的追问（如「那上周呢」「按 provider 拆」），结合历史理解其指代。若该问法当前不可用，如实说明并给出可用替代或下一步。",
+  );
+  return lines.join("\n");
+}
+
+function truncate(s: string, n: number): string {
+  return s.length > n ? `${s.slice(0, n)}…` : s;
 }
