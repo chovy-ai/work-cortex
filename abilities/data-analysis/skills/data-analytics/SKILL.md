@@ -57,19 +57,13 @@ node build/domains/datafinder-interface/cli.js call report.query --params '{"rep
 
 适用：用户要自定义指标/事件集/拆分维度，没有现成报表能直接答（如"按 provider 拆分某事件的近 7 天人数"）。
 
-1. **接地事件**：先有事件目录（见 Phase 0）。只用目录里真实存在的 `event_name`/`params`，不要臆造。
+1. **接地事件**：用 `call metadata.query --params '{"filter":{},"with":[]}'` 取应用真实事件列表（DataFinder 元数据），只用其中真实存在的 `event_name`，不要臆造。
 2. **构造 DSL**：analysis DSL 结构复杂——**最稳的起手式是借一个相近报表的 `dsl_content` 当模板**：`call report.query`（返回里含该报表的 `dsl_content`），照它改 `periods`（时间/粒度）与 `content.queries`（事件+指标：`event_indicator` 取 `events`=次数 / `event_users`=人数；`event_name` 用真实事件名，如页面访问是 `predefine_pageview`）。`resources`/`version` 沿用模板。
 3. **执行**：`call analysis.query --params '<DSL>'`。
 
 > **请求契约（关键，易错）**：analysis.query 的请求体 = **DSL 字段（`periods`/`content`/`resources`/`version`…）直接铺在顶层**，**不要**包成 `{"dsl":{...}}`。报表的 `dsl_content` 本身就是这个形状，可直接当 params。范围参数 `app_ids`（或 `project_ids`）由 cli/SDK 从 `.env.local` 自动注入，无需手填（要覆盖则显式传 `app_ids`/`project_ids`）。
 >
 > 真因排查：若报 `code=400`，看 SDK 错误里带出的 `errors`（如 `app_ids or project_ids must be provided`、`缺少某些字段 'periods'`）——那才是真原因。实测：用报表 `dsl_content` 直发 analysis.query 可稳定返回真实日序列。
-
-## Phase 0 — 事件目录（自由分析的接地，按需刷新）
-
-1. 拉应用源码：`bash domains/event-knowledge/sync_app.sh`（用户确认本地最新可跳过）。
-2. 生成目录：`node build/domains/event-knowledge/extract_events.js`（缺 build 先 `npm run build:ability`）→ `knowledge-store/event-catalog.json`。
-3. 读目录：每条含 `event_name` / `params` / `trigger_files`（上报时机）。这是本会话事件的权威来源，优先于 DataFinder metadata 接口。
 
 ## "为什么变了"——归因（可选）
 

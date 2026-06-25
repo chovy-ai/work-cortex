@@ -14,38 +14,12 @@ function load_json(rel_path: string): Record<string, any> {
   return JSON.parse(readFileSync(path.join(ROOT, rel_path), "utf-8"));
 }
 
-test("test_domain_module_contracts_exist", async (t) => {
-  const modules: Record<string, string> = {
-    "domains/event-knowledge/module.json": "event-knowledge",
-    "domains/metric-semantics/module.json": "metric-semantics",
-  };
-
-  for (const [rel_path, expected_id] of Object.entries(modules)) {
-    await t.test(`rel_path=${rel_path}`, () => {
-      const module = load_json(rel_path);
-      assert.equal(module["id"], expected_id);
-      assert.ok("update" in module);
-      assert.ok("check" in module);
-      assert.ok("serves" in module);
-    });
-  }
-});
-
 test("test_target_files_exist_and_legacy_files_are_removed", async (t) => {
   const expected_files = [
-    "domains/event-knowledge/sync_app.sh",
-    "domains/event-knowledge/extract_events.ts",
     "domains/datafinder-interface/cli.ts",
-    "domains/metric-semantics/data-model-protocol.md",
-    "domains/metric-semantics/extract_data_model.ts",
     "domains/intent-routing/capabilities.json",
     "domains/intent-routing/capability-inventory.md",
-    "domains/intent-routing/query-intent-protocol.md",
-    "domains/intent-routing/query-intent.schema.json",
-    "domains/knowledge-update/update_knowledge.ts",
-    "domains/knowledge-update/check_freshness.ts",
     "domains/knowledge-update/check_capabilities_sync.ts",
-    "knowledge-store/.gitkeep",
     "outputs/.gitkeep",
   ];
   for (const rel_path of expected_files) {
@@ -67,21 +41,6 @@ test("test_target_files_exist_and_legacy_files_are_removed", async (t) => {
       assert.ok(!existsSync(path.join(ROOT, rel_path)), rel_path);
     });
   }
-});
-
-test("test_event_extractor_uses_new_store_paths", () => {
-  const source = readFileSync(path.join(ROOT, "domains/event-knowledge/extract_events.ts"), "utf-8");
-  // Output path is now config-driven via app.config.json (output.eventCatalog),
-  // resolved through the central loader instead of a hardcoded string.
-  assert.ok(source.includes("resolveOutput(CONFIG.output.eventCatalog"));
-  assert.ok(!source.includes("SKILL_ROOT"));
-
-  // The configured output still lands under knowledge-store/ — the guarantee
-  // the original assertion was protecting. Read the committed template
-  // (app.config.json is gitignored / local-only).
-  const appConfig = load_json("app.config.example.json");
-  assert.equal(appConfig["output"]["eventCatalog"], "knowledge-store/event-catalog.json");
-  assert.equal(appConfig["output"]["dataModel"], "knowledge-store/data-model.json");
 });
 
 test("test_datafinder_manifest_is_verified_and_cli_lists_without_legacy_package", async (t) => {

@@ -18,7 +18,7 @@ const execFileP = promisify(execFile);
 // dist/service.js → 包根（platform/service-gateway）→ platform → 仓库根
 const sgRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const repoRoot = resolve(sgRoot, "..", "..");
-// 分析能力本体：agent 工作目录，outputs/ 与 knowledge-store/ 都在这里
+// 分析能力本体：skill agent 的工作目录（含 skills/、.env.local、outputs/）
 const abilityRoot = join(repoRoot, "abilities", "data-analysis");
 
 interface Config {
