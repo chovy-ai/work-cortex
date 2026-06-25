@@ -11,7 +11,7 @@ import { startLarkListener } from "./connectors/lark/listener.js";
 import { LarkSender } from "./connectors/lark/sender.js";
 import { ConsoleSender } from "./connectors/console/sender.js";
 import { startConsoleHttp, type ConsoleHttpHandle } from "./connectors/console/http.js";
-import type { RunnerFn } from "./core/contracts.js";
+import { createSkillRunner } from "./capabilities/data-analysis/runner.js";
 
 const execFileP = promisify(execFile);
 
@@ -121,15 +121,9 @@ async function main(): Promise<void> {
   const queue = new EnvelopeQueue(cfg.queue, log);
   const sender = new LarkSender({ bin: cfg.lark.bin, log });
   const consoleSender = new ConsoleSender(log);
-  // 旧数据分析能力（query-execution scheduler）已移除；新链路 @workcortex/analytics-query
-  // 重建中、尚未接入。此处为占位 runner：任何查询都以「能力未配置」明确告知，不静默吞。
-  const runner: RunnerFn = async (_task, emit) => {
-    emit({
-      kind: "error",
-      reason: "数据分析能力暂未配置：旧链路已移除，新链路（analytics-query）正在重建中。",
-      retriable: false,
-    });
-  };
+  // 数据分析能力：skill 驱动 —— 拉 ACP agent 读 data-analytics SKILL，在能力工作目录用
+  // datafinder cli 自取数据并产出结论（看板复用 / 自由分析）。
+  const runner = createSkillRunner({ abilityRoot, abilityRelCwd: "abilities/data-analysis", log });
   let sessions: Sessions;
   const runtime = new Runtime({
     maxConcurrent: cfg.runtime.maxConcurrent,
