@@ -111,7 +111,7 @@
     },
     {
       "id": "analysis.query",
-      "summary": "Run an event analysis DSL query and fetch the computed result (trends, distinct users, counts, breakdowns).",
+      "summary": "Run an event analysis DSL query and fetch the computed result (trends, distinct users, counts, breakdowns). 请求体 = 分析 DSL 字段（periods/content/resources/version…）直接铺在顶层，并必须带 app_ids 或 project_ids 限定范围；不要包成 {dsl:{...}}。",
       "capability_id": "datafinder.openapi.analysis_query",
       "wrapper": "execute_analysis_query",
       "method": "POST",
@@ -119,10 +119,14 @@
       "path_verified": true,
       "doc_url": "https://www.volcengine.com/docs/84129/1285239?lang=zh",
       "required_params": {
-        "dsl": "object"
+        "periods": "array",
+        "content": "object"
       },
       "optional_params": {
-        "app_id": "int",
+        "app_ids": "array",
+        "project_ids": "array",
+        "resources": "array",
+        "version": "int",
         "timezone": "string"
       },
       "response": {

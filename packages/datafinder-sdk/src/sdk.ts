@@ -92,8 +92,18 @@ export class DataFinderSDK {
   };
 
   readonly analysis = {
-    /** 事件分析 DSL 查询。@see https://www.volcengine.com/docs/84129/1285239?lang=zh */
-    query: (p: P.AnalysisQueryParams): Promise<DfResult> => this.call("analysis.query", { ...p }),
+    /**
+     * 事件分析 DSL 查询。火山要求：DSL 字段铺在请求体顶层 + app_ids|project_ids 限定范围。
+     * 本方法自动铺平 p.dsl 并注入范围（不要把 dsl 包成 {dsl:{...}}）。
+     * @see https://www.volcengine.com/docs/84129/1285239?lang=zh
+     */
+    query: (p: P.AnalysisQueryParams): Promise<DfResult> =>
+      this.call("analysis.query", {
+        ...p.dsl,
+        ...(p.app_ids ? { app_ids: p.app_ids } : {}),
+        ...(p.project_ids ? { project_ids: p.project_ids } : {}),
+        ...(p.timezone ? { timezone: p.timezone } : {}),
+      }),
     /** 按 result_id 取异步分析结果。@see https://www.volcengine.com/docs/84129/1285232?lang=zh */
     result: (p: P.AnalysisResultParams): Promise<DfResult> => this.call("analysis.result", { ...p }),
     /** 导出大规模分组结果。@see https://www.volcengine.com/docs/84129/1285237?lang=zh */

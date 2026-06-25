@@ -8,7 +8,7 @@ description: Query and analyze 火山引擎 DataFinder product analytics. Two ca
 把自然语言分析诉求变成 **火山引擎 DataFinder** 调用并出数。两种能力：
 
 - **能力 A — 看板复用（dashboard）**：复用 DataFinder 里已建好的看板/报表（口径由资产自身定义，最稳）。**当前可用** ✅
-- **能力 B — 自由分析（free analysis）**：对事件自定义指标/拆分，构造 analysis DSL 查询。**当前受限** ⚠️（见下方状态）
+- **能力 B — 自由分析（free analysis）**：对事件自定义指标/拆分，构造 analysis DSL 查询。**当前可用** ✅
 
 所有 DataFinder 调用都经独立 SDK 包 `@workcortex/datafinder-sdk`（manifest 驱动、自描述、每端点带官方文档链接）。凭据在 ability 根的 `.env.local`，由适配层 `domains/datafinder-interface/index.js` 注入。
 
@@ -44,15 +44,17 @@ node build/domains/datafinder-interface/cli.js call report.query --params '{"rep
 
 实测：报表 PV&UV（`7649241423115461888`）能稳定返回真实 PV/UV 日序列。
 
-## 能力 B — 自由分析（free analysis）⚠️
+## 能力 B — 自由分析（free analysis）✅
 
 适用：用户要自定义指标/事件集/拆分维度，没有现成报表能直接答（如"按 provider 拆分某事件的近 7 天人数"）。
 
 1. **接地事件**：先有事件目录（见 Phase 0）。只用目录里真实存在的 `event_name`/`params`，不要臆造。
-2. **构造 DSL**：analysis DSL 结构复杂——**最稳的起手式是借一个相近报表的 `dsl_content` 当模板**：`call report.query`（返回里含该报表的 `dsl_content`），照它改 `periods`（时间/粒度）与 `content.queries`（事件+指标：`events`=次数 / `event_users`=人数；`event_name` 用真实事件名）。作用域 `resources`(project_ids/app_ids/subject_ids) 沿用模板真值。
-3. **执行**：`call analysis.query --params '{"dsl": {...}, "timezone":"Asia/Shanghai"}'`。
+2. **构造 DSL**：analysis DSL 结构复杂——**最稳的起手式是借一个相近报表的 `dsl_content` 当模板**：`call report.query`（返回里含该报表的 `dsl_content`），照它改 `periods`（时间/粒度）与 `content.queries`（事件+指标：`event_indicator` 取 `events`=次数 / `event_users`=人数；`event_name` 用真实事件名，如页面访问是 `predefine_pageview`）。`resources`/`version` 沿用模板。
+3. **执行**：`call analysis.query --params '<DSL>'`。
 
-> **状态（务必如实告知用户）**：`analysis.query` 对当前应用**一律返回 `code=400`（"操作失败，请反馈给管理员"）**，连从有效报表抠出的 DSL 也 400——这是 DataFinder **端点级**问题（疑似该应用未开通"分析查询 OpenAPI"权限/套餐），不是 DSL 写错。排查：到火山引擎控制台确认该 app 的 analysis OpenAPI 权限；`report.query`/`dashboard.*` 不受影响。**在此之前，能用看板复用（能力 A）回答的就走 A。**
+> **请求契约（关键，易错）**：analysis.query 的请求体 = **DSL 字段（`periods`/`content`/`resources`/`version`…）直接铺在顶层**，**不要**包成 `{"dsl":{...}}`。报表的 `dsl_content` 本身就是这个形状，可直接当 params。范围参数 `app_ids`（或 `project_ids`）由 cli/SDK 从 `.env.local` 自动注入，无需手填（要覆盖则显式传 `app_ids`/`project_ids`）。
+>
+> 真因排查：若报 `code=400`，看 SDK 错误里带出的 `errors`（如 `app_ids or project_ids must be provided`、`缺少某些字段 'periods'`）——那才是真原因。实测：用报表 `dsl_content` 直发 analysis.query 可稳定返回真实日序列。
 
 ## Phase 0 — 事件目录（自由分析的接地，按需刷新）
 
@@ -62,7 +64,7 @@ node build/domains/datafinder-interface/cli.js call report.query --params '{"rep
 
 ## "为什么变了"——归因（可选）
 
-用户问 **why**（"DAU 为什么跌"）而非 what 时，走确定性分析引擎 `domains/analysis-engine/`（数据可信度门 → 异常确认 → 贡献度分解 → 下钻），见 `domains/analysis-engine/README.md` 与 `playbooks/rca-anomaly.yaml`。引擎仍经 DataFinder 取数——当前同样受 analysis.query 400 影响，确认后再启用。
+用户问 **why**（"DAU 为什么跌"）而非 what 时，走确定性分析引擎 `domains/analysis-engine/`（数据可信度门 → 异常确认 → 贡献度分解 → 下钻），见 `domains/analysis-engine/README.md` 与 `playbooks/rca-anomaly.yaml`。引擎经 DataFinder 取数（analysis.query 已可用）。
 
 ## 默认口径
 

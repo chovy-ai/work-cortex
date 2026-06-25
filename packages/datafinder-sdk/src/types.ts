@@ -27,11 +27,18 @@ export interface ReportQueryParams {
   app_id?: number;
 }
 
-/** analysis.query —— 事件分析 DSL 查询（趋势/分布/留存等）。 */
+/**
+ * analysis.query —— 事件分析 DSL 查询（趋势/分布/留存等）。
+ * 注意：火山要求 DSL 字段铺在请求体顶层、并带 app_ids 或 project_ids 限定范围。
+ * 这里用结构化入参，SDK 方法会自动铺平 dsl 并注入范围（不要自己包成 {dsl:{...}}）。
+ */
 export interface AnalysisQueryParams {
+  /** 分析 DSL（periods/content/resources/version…）。 */
   dsl: Record<string, unknown>;
+  /** 范围：app_ids 或 project_ids 至少给一个。 */
+  app_ids?: number[];
+  project_ids?: number[];
   timezone?: string;
-  app_id?: number;
 }
 
 /** analysis.result —— 按 result_id 取异步分析结果（私有化部署）。 */

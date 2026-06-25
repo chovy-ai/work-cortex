@@ -191,6 +191,12 @@ export class DataFinderClient {
     if ("app_id" in (ep.required_params ?? {}) && !("app_id" in body)) {
       body["app_id"] = this.config.app_id;
     }
+    // 端点接受 app_ids（如 analysis.query 必须带 app_ids 或 project_ids）且调用方两者都没给时，
+    // 从配置注入 app_ids，省得调用方（含 agent 经 cli）每次自己塞 app_id。
+    const params_all = { ...(ep.required_params ?? {}), ...(ep.optional_params ?? {}) };
+    if ("app_ids" in params_all && !("app_ids" in body) && !("project_ids" in body)) {
+      body["app_ids"] = [this.config.app_id];
+    }
 
     const missing = Object.keys(ep.required_params ?? {}).filter((p) => !(p in body));
     if (missing.length > 0) {
@@ -357,10 +363,15 @@ export class DataFinderClient {
         // 不带它们根本没法排查（提工单也要 log_id）。
         const logId = payload["log_id"] ?? payload["request_id"] ?? (payload["data"] as any)?.["log_id"];
         const msg = String(payload["message"] ?? payload["msg"] ?? "business error");
+        // 火山常把真因藏在 errors[]（如 "app_ids or project_ids must be provided"），
+        // message 只给通用「操作失败」。一并带出，否则根本没法排查。
+        const errs = Array.isArray(payload["errors"]) && payload["errors"].length
+          ? `；${(payload["errors"] as unknown[]).map(String).join("；")}`
+          : "";
         return {
           status: "error",
           error_code: "openapi_business_error",
-          error_message: `${msg}（code=${String(code)}${logId ? `, log_id=${String(logId)}` : ""}）`,
+          error_message: `${msg}（code=${String(code)}${logId ? `, log_id=${String(logId)}` : ""}）${errs}`,
           http_status: resp.status,
           warnings: [],
         };
