@@ -49,6 +49,8 @@ export interface DataFinderConfig {
   access_key: string;
   secret_key: string;
   app_id: number;
+  /** 分析项目 id（analysis DSL 的 resources 作用域用）。.env.local 的 DATAFINDER_PROJECT_ID。 */
+  project_id?: number;
   region?: string;
   service?: string;
   timeout_seconds?: number;
@@ -110,7 +112,8 @@ function pyQuote(s: string): string {
 export class DataFinderClient {
   static readonly SIGN_EXPIRE_SECONDS = 1800;
 
-  readonly config: Required<DataFinderConfig>;
+  // region/service/timeout 由构造器兜底故必有；project_id 可缺省（非所有接入都需要分析项目作用域）
+  readonly config: Required<Omit<DataFinderConfig, "project_id">> & { project_id?: number };
   readonly manifest: Manifest;
   private byId: Map<string, ManifestEndpoint>;
 
@@ -351,10 +354,14 @@ export class DataFinderClient {
       const payload = (await resp.json()) as Record<string, unknown>;
       const code = payload["code"];
       if (code !== 0 && code !== 200) {
+        // 保留真实 code 与 log_id/request_id —— 「操作失败，请反馈给管理员」这类通用文案
+        // 不带它们根本没法排查（提工单也要 log_id）。
+        const logId = payload["log_id"] ?? payload["request_id"] ?? (payload["data"] as any)?.["log_id"];
+        const msg = String(payload["message"] ?? payload["msg"] ?? "business error");
         return {
           status: "error",
           error_code: "openapi_business_error",
-          error_message: String(payload["message"] ?? payload["msg"] ?? "business error"),
+          error_message: `${msg}（code=${String(code)}${logId ? `, log_id=${String(logId)}` : ""}）`,
           http_status: resp.status,
           warnings: [],
         };
@@ -494,7 +501,7 @@ export class DataFinderClient {
 
 /**
  * Build a DataFinderConfig from a .env.local file (project root by default).
- * Reads DATAFINDER_BASE_URL / ACCESS_KEY / SECRET_KEY / APP_ID / REGION / SERVICE.
+ * Reads DATAFINDER_BASE_URL / ACCESS_KEY / SECRET_KEY / APP_ID / PROJECT_ID / REGION / SERVICE.
  */
 export function loadConfigFromEnv(envPath?: string): DataFinderConfig {
   const path = envPath ?? join(REPO_ROOT, ".env.local");
@@ -513,6 +520,7 @@ export function loadConfigFromEnv(envPath?: string): DataFinderConfig {
     access_key: values["DATAFINDER_ACCESS_KEY"],
     secret_key: values["DATAFINDER_SECRET_KEY"],
     app_id: Number(values["DATAFINDER_APP_ID"]),
+    project_id: values["DATAFINDER_PROJECT_ID"] ? Number(values["DATAFINDER_PROJECT_ID"]) : undefined,
     region: values["DATAFINDER_REGION"] ?? "cn-north-1",
     service: values["DATAFINDER_SERVICE"] ?? "datafinder",
   };

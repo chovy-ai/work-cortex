@@ -114,6 +114,16 @@ export interface WorkflowStep {
   id: string;
   kind?: string;
   run: string;
+  /** 面向用户的中文进度文案（讲清「在干嘛」），由 run() 的 onStep 钩子透出。 */
+  label?: string;
+}
+
+/** run() 的可选钩子：逐步进度上报 + 协作取消。 */
+export interface RunOpts {
+  /** 每进入一个 step 前回调（用于把进度翻成 gateway 事件）。 */
+  onStep?: (info: { step_id: string; label: string; kind: string }) => void;
+  /** 取消信号：每步之间检查，已 abort 则停止推进（状态保持 running，由调用方收尾）。 */
+  signal?: AbortSignal;
 }
 
 export interface Workflow {
@@ -166,8 +176,15 @@ export class StepScheduler {
     return new SchedulerState(payload);
   }
 
-  async run(state: SchedulerState): Promise<SchedulerState> {
+  async run(state: SchedulerState, opts: RunOpts = {}): Promise<SchedulerState> {
     while (state.status === "running") {
+      if (opts.signal?.aborted) return state; // 协作取消：保持 running，调用方收尾
+      const step = this.steps[state.current_step];
+      opts.onStep?.({
+        step_id: state.current_step,
+        label: step?.label ?? state.current_step,
+        kind: step?.kind ?? "step",
+      });
       const outcome = await this._run_step(state.current_step, state.context);
       state.apply(outcome);
       if (state.status !== "running") {
@@ -184,7 +201,19 @@ export class StepScheduler {
     if (state.status !== "awaiting_input") {
       throw new Error("state is not awaiting input");
     }
-    state.context["user_review"] = payload;
+    // 按挂起的 step 把用户输入路由进上下文（不同 gate 读不同的 ctx 键）。
+    const awaiting = state.awaiting_step;
+    if (awaiting === "understand") {
+      // 澄清：把追加信息并进原问题，清掉旧 intent 以便 understand 重跑。
+      const extra = String(payload["answer"] ?? payload["text"] ?? "").trim();
+      if (extra) state.context["text"] = `${state.context["text"] ?? ""}\n${extra}`.trim();
+      delete state.context["query_intent"];
+      delete state.context["query_path"];
+    } else {
+      // 方案确认 gate（raw.user_review）及其它：整个 payload 落到 user_review。
+      state.context["user_review"] = payload;
+    }
+    state.current_step = awaiting ?? state.current_step;
     state.status = "running";
     state.awaiting_step = null;
     state.await_payload = {};

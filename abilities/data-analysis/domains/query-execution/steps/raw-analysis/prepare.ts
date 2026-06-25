@@ -7,6 +7,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { runStructured } from "atomic-abilities";
 import { StepOutcome } from "../../scheduler/scheduler.js";
+import { fillAppPlaceholders } from "../../../app-config/config.js";
 
 // build/domains/query-execution/steps/raw-analysis/prepare.js → 仓库根（上 5 层）
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "..", "..");
@@ -35,7 +36,7 @@ export async function run(ctx: Record<string, any>): Promise<StepOutcome> {
     return StepOutcome.fail("raw prepare: 缺少 matched 的 QueryIntent");
   }
 
-  const protocol = readFileSync(MODEL_PROTOCOL, "utf8");
+  const protocol = fillAppPlaceholders(readFileSync(MODEL_PROTOCOL, "utf8"), REPO_ROOT);
   const capabilities = readFileSync(CAPABILITIES, "utf8");
   const prompt = [
     "你是数据分析准备器。依据下面的口径协议与能力清单，为这条已匹配的 QueryIntent 选定数据路径与口径。",

@@ -30,8 +30,11 @@ export async function renderNarrative(ctx: Record<string, any>): Promise<ReportN
   const question: string = ctx["text"] ?? ctx["input_text"] ?? "(未知问题)";
   const data = describeResult(er.result);
 
+  // persona 由 IM 接入层（gateway 能力）注入 ctx，决定最终回复的嗓音/口吻；无则用中性分析师口吻
+  const persona: string = (ctx["persona"] ?? "").toString().trim();
   const prompt = [
-    "你是数据分析师，面向业务同学（不是工程师）。根据下面的查询结果回答用户问题。",
+    persona || "你是数据分析师，面向业务同学（不是工程师）。",
+    "根据下面的查询结果回答用户问题。",
     `[用户问题]\n${question}`,
     `[查询结果 CSV]\n${data}`,
     "",

@@ -5,6 +5,12 @@ description: Analyze application product analytics data from 火山引擎 DataFi
 
 # Data Analytics
 
+> **状态（2026-06-16）**：本文已退为**人读参考**，不再是运行时执行权威。
+> 线上查询链路由查询执行域的声明式调度器强制执行——service-gateway 的 data-analysis 能力
+> 进程内驱动 `domains/query-execution/scheduler`（step 图见 `scheduler/workflow.json`，
+> 架构见 `ARCHITECTURE.md`）。下面的 Phase 0 知识更新流程仍然适用；查询/路由/评审/报告的
+> 真相在各 step 代码里，改流程请改 step 与 workflow.json，不要改这里的散文。
+
 ## Workflow
 
 ### Phase 0 — Sync & Index (run once per session, or when event data feels stale)
@@ -61,6 +67,19 @@ Use when the model must decide which events to include, how to define the metric
 9B. Compile QueryPlan into an executable request plan. Read `domains/query-execution/protocols/raw-analysis/compiled-query-protocol.md` and validate shape against `domains/query-execution/protocols/raw-analysis/compiled-query.schema.json`.
 10B. Execute the compiled query and return ExecutionResult. Read `domains/query-execution/protocols/raw-analysis/execution-result-protocol.md` and validate shape against `domains/query-execution/protocols/raw-analysis/execution-result.schema.json`.
 11B. Validate result quality: row count, date coverage, `app_id`, timezone, null identity rate, duplicate rate, and whether server/client time differs materially. Report results with the exact metric definition, query inputs, commands or API path used, and remaining uncertainty.
+
+#### Path C — Analytical Investigation (`query_path: raw_analysis` + 归因意图)
+
+Use when the user asks **why** a metric moved ("DAU 为什么跌了", "留存为什么下降", "哪个渠道拖累了增长"), not just **what** the number is. This is the professional-analyst path: don't eyeball numbers and guess — drive the deterministic engine in `domains/analysis-engine/`.
+
+The engine (`analysis-engine`) runs the methodology as code (data-trust gate → anomaly confirmation → contribution decomposition → drill-down) and calls back to you only at decision points. **Do not compute contribution shares or rank factors yourself — the engine does that deterministically.** Your job is the four decision hooks:
+
+1. **classify** — map the question to `metric`, comparison `window` (current vs base period), and `candidateDimensions` (only dimensions registered in `app.config` — never invent dimensions).
+2. **selectDimensions** — at each level, pick which candidate dimensions are worth decomposing given product context.
+3. **shouldDrill** — read the engine's contribution tree; decide whether the top factor is specific enough to stop, or drill into it.
+4. **narrate** — turn the structured `RcaResult` into a conclusion-first answer (主因 + 贡献% + 数据可信度 + 建议 + 下一步).
+
+Read `domains/analysis-engine/README.md` for the API and `domains/analysis-engine/playbooks/rca-anomaly.yaml` for the RCA spec. Build first if needed (`npm run build:tools`). The engine still fetches through the DataFinder module / executors selected in Step 5B, wrapped by `DataFinderProvider`. The two-stage review gate (6B/7B) still applies before any execution.
 
 ## Default Metric Policy
 

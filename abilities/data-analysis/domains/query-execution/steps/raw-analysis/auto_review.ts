@@ -7,6 +7,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { runStructured } from "atomic-abilities";
 import { StepOutcome } from "../../scheduler/scheduler.js";
+import { fillAppPlaceholders } from "../../../app-config/config.js";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "..", "..");
 const REVIEW_PROTOCOL = join(REPO_ROOT, "domains", "query-execution", "protocols", "raw-analysis", "review-protocol.md");
@@ -30,8 +31,8 @@ export async function run(ctx: Record<string, any>): Promise<StepOutcome> {
     return StepOutcome.fail("raw auto_review: 缺少 query_intent 或 raw_context");
   }
 
-  const reviewProtocol = readFileSync(REVIEW_PROTOCOL, "utf8");
-  const modelProtocol = readFileSync(MODEL_PROTOCOL, "utf8");
+  const reviewProtocol = fillAppPlaceholders(readFileSync(REVIEW_PROTOCOL, "utf8"), REPO_ROOT);
+  const modelProtocol = fillAppPlaceholders(readFileSync(MODEL_PROTOCOL, "utf8"), REPO_ROOT);
   const prompt = [
     "你是独立评审 agent，按下面的 Review Protocol（Stage 1）评审本次分析准备是否可靠。",
     "只依据 QueryIntent、raw_context 和口径协议判断，不臆测对话历史。",

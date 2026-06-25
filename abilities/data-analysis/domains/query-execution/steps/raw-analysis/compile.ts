@@ -8,6 +8,8 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { runStructured } from "atomic-abilities";
 import { StepOutcome } from "../../scheduler/scheduler.js";
+import { loadConfigFromEnv } from "../../../datafinder-interface/client.js";
+import { fillAppPlaceholders } from "../../../app-config/config.js";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "..", "..");
 const RA_DIR = join(REPO_ROOT, "domains", "query-execution", "protocols", "raw-analysis");
@@ -40,7 +42,7 @@ export async function run(ctx: Record<string, any>): Promise<StepOutcome> {
 async function compileAnalysis(ctx: Record<string, any>): Promise<StepOutcome> {
   const exampleStr = readFileSync(join(RA_DIR, "analysis-dsl-example.json"), "utf8");
   const example = JSON.parse(exampleStr) as Record<string, any>;
-  const protocol = readFileSync(MODEL_PROTOCOL, "utf8");
+  const protocol = fillAppPlaceholders(readFileSync(MODEL_PROTOCOL, "utf8"), REPO_ROOT);
 
   const prompt = [
     "你要为一次事件分析构造 DataFinder analysis DSL。下面给你一个【真实可用的 DSL 范例】，在它结构基础上改造：",
@@ -68,9 +70,17 @@ async function compileAnalysis(ctx: Record<string, any>): Promise<StepOutcome> {
     return StepOutcome.fail(`raw compile: DSL 构造失败：${String(err)}`);
   }
 
-  // 安全网：环境关键字段强制用范例真值，避免 LLM 改坏 project/subject 作用域
-  dsl["resources"] = example["resources"];
-  dsl["app_ids"] = example["app_ids"];
+  // 安全网：作用域字段不信任 LLM，强制用真实配置。app_id / project_id 来自 .env.local
+  // （覆盖范例里的空 app_ids 与历史写死的 project_id），让查询真正打到本应用的数据；
+  // subject_ids 等结构沿用范例（无独立配置来源）。
+  const cfg = loadConfigFromEnv();
+  const resources = (JSON.parse(JSON.stringify(example["resources"] ?? [])) as Record<string, any>[]);
+  for (const r of resources) {
+    r["app_ids"] = [cfg.app_id];
+    if (cfg.project_id != null) r["project_ids"] = [cfg.project_id];
+  }
+  dsl["resources"] = resources;
+  dsl["app_ids"] = [cfg.app_id];
   if (dsl["version"] == null) dsl["version"] = example["version"];
 
   return StepOutcome.next({

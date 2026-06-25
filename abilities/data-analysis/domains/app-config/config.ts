@@ -144,3 +144,37 @@ export function resolveTargetRepo(
 export function resolveOutput(relFromRoot: string, root: string = dataAnalysisRoot()): string {
   return path.join(root, relFromRoot);
 }
+
+/** 从 .env.local 读单个键（缺文件/缺键返回 null）。只为占位符替换取非密标识，不暴露 AK/SK。 */
+function readEnvValue(root: string, key: string): string | null {
+  try {
+    for (const rawLine of fs.readFileSync(path.join(root, ".env.local"), "utf-8").split("\n")) {
+      const line = rawLine.trim();
+      if (!line || line.startsWith("#") || !line.includes("=")) continue;
+      const idx = line.indexOf("=");
+      if (line.slice(0, idx).trim() === key) return line.slice(idx + 1).trim();
+    }
+  } catch {
+    /* 没有 .env.local：保持占位符原样 */
+  }
+  return null;
+}
+
+/**
+ * 把协议/提示词里的应用占位符替换成真实配置值，让 LLM（及面向用户的方案卡片）看到真值
+ * 而非 `<your-app-id>`。取不到对应配置时保持占位符原样（不抛错、不伪造）。
+ *   `<your-app-id>`   → .env.local 的 DATAFINDER_APP_ID
+ *   `<your-app-name>` → app.config.json 的 app.name
+ */
+export function fillAppPlaceholders(text: string, root: string = dataAnalysisRoot()): string {
+  let out = text;
+  const appId = readEnvValue(root, "DATAFINDER_APP_ID");
+  if (appId) out = out.replaceAll("<your-app-id>", appId);
+  try {
+    const name = loadAppConfig(root).app.name;
+    if (name) out = out.replaceAll("<your-app-name>", name);
+  } catch {
+    /* app.config.json 不可读：保持占位符原样 */
+  }
+  return out;
+}

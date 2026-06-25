@@ -1,0 +1,70 @@
+# Playbook: 指标异常归因 (RCA)
+#
+# 声明式 spec —— 由 RcaEngine（domains/analysis-engine/rca.ts）执行，不是给模型读的散文。
+# 每个 step 的确定性部分由引擎跑；标注 by:llm 的是回调到决策钩子的判断点。
+
+id: rca-anomaly
+title: 指标异常归因
+trigger_intent: "某指标在某时间段异常上涨/下跌/突刺，需要定位主因"
+
+# LLM 把自然语言问题映射到这些槽（classify 钩子）
+slots:
+  metric: { from: llm, desc: "被诊断指标，需与 metrics 口径登记一致" }
+  window:
+    current: { from: llm, desc: "异常期绝对日期区间" }
+    base: { from: llm, desc: "参照期（上一周期/去年同期）" }
+  candidate_dimensions:
+    from: llm
+    desc: "候选拆解维度，须来自 app.config 的维度注册表（合法集合，模型不可臆造）"
+
+steps:
+  - id: data_trust          # Step 0
+    by: code
+    impl: checkDataTrust
+    inputs: [metricDefinitionMatches, sampleSize, nullRate, hasReportDelayRisk, segmentCoverage, isRatioMetric]
+    on_block: stop          # blocking 非空 → 停，先查数据，不做业务归因
+
+  - id: detect_anomaly      # Step 1
+    by: code
+    impl: detectAnomaly
+    config: { baselines: [trailing_28d, mom, yoy], band: 2 }   # 2σ
+    on_normal: stop         # 无显著异常 → 停（除非 force）
+
+  - id: select_dimensions   # Step 2
+    by: llm                 # 从 candidate_dimensions 里挑该层值得拆的（结合业务语境）
+    fallback: all_unused    # 无钩子时用全部未使用维度
+
+  - id: decompose           # Step 3：核心，纯数学
+    by: code
+    impl: "decompose + rankDimensions"
+    metric_of_interest: contribution_share   # delta_seg / delta_total
+    select_split: max(concentration * coverage)   # 选最具解释力的维度做主切分
+    surface: [residual, coverage, concentration]  # 残差/覆盖率必须暴露
+
+  - id: should_drill        # Step 5：是否继续下钻
+    by: llm
+    fallback:               # 无钩子时的纯阈值兜底
+      stop_when_top_share: 0.7
+      max_depth: 3
+      stop_when_coverage_below: 0.5
+
+  - id: narrate             # 收敛输出
+    by: llm
+    template: conclusion_first
+
+drill:
+  default_dimension_priority: [channel, app_version, user_type, os, region, entry]
+  # 实际维度与取数方式登记在 app.config（维度注册表），此处仅给默认优先级
+
+output_template: |
+  【结论】{metric} {window.current} {direction} {pct}%，主因 {top_factor}（贡献 {top_share}%）。
+  【证据】{decomposition_top_factors} ；时间对齐：{change_point_alignment}
+  【数据可信度】{trust_cautions_or_ok}
+  【建议】{actionable}
+  【下一步】{open_hypotheses}
+
+cautions:
+  - 率类指标先查分子/分母各自变化，勿用可加性贡献度直接拆（isRatioMetric 拦截）
+  - 辛普森悖论：总体没动但各分群都在动 → 必须逐 segment 看 delta
+  - 时间对齐是最强因果证据：变化点与某发版/活动同一天，嫌疑最大
+  - 相关 ≠ 因果：无机制解释或实验，不主张因果
