@@ -27,10 +27,9 @@ import { readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-// 编译产物位于 build/domains/datafinder-interface/，仓库根在向上三级
-const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
-const MODULE_SRC_DIR = join(REPO_ROOT, "domains", "datafinder-interface");
-const MANIFEST_PATH = join(MODULE_SRC_DIR, "manifest.json");
+// 编译产物 dist/src/client.js → 包根；manifest.json 放包根，运行时读取（tsc 不拷 json）。
+const PKG_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
+const MANIFEST_PATH = join(PKG_ROOT, "manifest.json");
 
 // ── Config & result types ──────────────────────────────────────────────────────
 
@@ -500,11 +499,12 @@ export class DataFinderClient {
 // ── Config loader from .env.local ───────────────────────────────────────────────
 
 /**
- * Build a DataFinderConfig from a .env.local file (project root by default).
- * Reads DATAFINDER_BASE_URL / ACCESS_KEY / SECRET_KEY / APP_ID / PROJECT_ID / REGION / SERVICE.
+ * Build a DataFinderConfig from a .env.local file. SDK 配置无关：调用方传入路径
+ * （不传则取 process.cwd()/.env.local）。Reads DATAFINDER_BASE_URL / ACCESS_KEY /
+ * SECRET_KEY / APP_ID / PROJECT_ID / REGION / SERVICE.
  */
 export function loadConfigFromEnv(envPath?: string): DataFinderConfig {
-  const path = envPath ?? join(REPO_ROOT, ".env.local");
+  const path = envPath ?? join(process.cwd(), ".env.local");
   const values: Record<string, string> = {};
   for (const rawLine of readFileSync(path, "utf-8").split("\n")) {
     const line = rawLine.trim();

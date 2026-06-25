@@ -1,0 +1,26 @@
+{
+  "name": "@workcortex/datafinder-sdk",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "火山引擎 DataFinder OpenAPI 的灵活 SDK：manifest 驱动、自描述、每个接口自带官方文档链接",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": ["dist", "manifest.json", "README.md"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "gen:readme": "npm run build && node dist/scripts/gen-readme.js"
+  },
+  "engines": { "node": ">=20" },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "typescript": "^5.5.0"
+  }
+}

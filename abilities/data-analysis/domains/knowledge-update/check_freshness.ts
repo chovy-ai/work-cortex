@@ -121,7 +121,8 @@ function checkEventKnowledge(): [string, string[]] {
 }
 
 function checkDatafinderInterface(): [string, string[]] {
-  const manifest = loadJson(path.join(ROOT, "domains", "datafinder-interface", "manifest.json"));
+  // manifest 已抽离到独立包 @workcortex/datafinder-sdk（单一真源）。
+  const manifest = loadJson(path.join(ROOT, "..", "..", "packages", "datafinder-sdk", "manifest.json"));
   if (Object.keys(manifest).length === 0) {
     return ["stale", ["manifest.json is missing"]];
   }

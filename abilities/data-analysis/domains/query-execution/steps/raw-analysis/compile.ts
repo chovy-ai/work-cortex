@@ -8,7 +8,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { runStructured } from "atomic-abilities";
 import { StepOutcome } from "../../scheduler/scheduler.js";
-import { loadConfigFromEnv } from "../../../datafinder-interface/client.js";
+import { dataFinderConfig } from "../../../datafinder-interface/index.js";
 import { fillAppPlaceholders } from "../../../app-config/config.js";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "..", "..");
@@ -73,7 +73,7 @@ async function compileAnalysis(ctx: Record<string, any>): Promise<StepOutcome> {
   // 安全网：作用域字段不信任 LLM，强制用真实配置。app_id / project_id 来自 .env.local
   // （覆盖范例里的空 app_ids 与历史写死的 project_id），让查询真正打到本应用的数据；
   // subject_ids 等结构沿用范例（无独立配置来源）。
-  const cfg = loadConfigFromEnv();
+  const cfg = dataFinderConfig();
   const resources = (JSON.parse(JSON.stringify(example["resources"] ?? [])) as Record<string, any>[]);
   for (const r of resources) {
     r["app_ids"] = [cfg.app_id];

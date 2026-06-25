@@ -11,7 +11,8 @@
  *     node build/domains/datafinder-interface/cli.js call report.query --params '{"report_id":"123","period":{"start_time":"2026-06-01","end_time":"2026-06-07"}}'
  */
 
-import { DataFinderClient, EndpointNotFound, loadConfigFromEnv, loadManifest } from "./client.js";
+import { DataFinderClient, EndpointNotFound, loadConfigFromEnv, loadManifest } from "@workcortex/datafinder-sdk";
+import { dataFinderConfig } from "./index.js";
 
 function cmdList(): number {
   const manifest = loadManifest();
@@ -42,7 +43,8 @@ function cmdDescribe(endpointId: string): number {
 
 async function cmdCall(endpointId: string, paramsJson?: string, envPath?: string): Promise<number> {
   const params = paramsJson ? (JSON.parse(paramsJson) as Record<string, unknown>) : {};
-  const config = loadConfigFromEnv(envPath);
+  // 默认用本应用 .env.local（适配层）；--env 显式覆盖。
+  const config = envPath ? loadConfigFromEnv(envPath) : dataFinderConfig();
   const client = new DataFinderClient(config);
   let result;
   try {

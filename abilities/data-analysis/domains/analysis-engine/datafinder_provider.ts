@@ -10,7 +10,7 @@
  *
  * 这样：分析逻辑（贡献度/异常/下钻）完全确定且可单测；与 DataFinder 的耦合收敛到这一个文件。
  */
-import type { APIResult, DataFinderClient } from "../datafinder-interface/client.js";
+import type { APIResult, DataFinderClient } from "@workcortex/datafinder-sdk";
 import type { MetricDataProvider, Period, SegmentValue, SeriesPoint, TimeWindow } from "./types.js";
 
 export interface MetricQuerySpec {

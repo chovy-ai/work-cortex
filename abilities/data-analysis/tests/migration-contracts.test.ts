@@ -38,9 +38,7 @@ test("test_target_files_exist_and_legacy_files_are_removed", async (t) => {
   const expected_files = [
     "domains/event-knowledge/sync_app.sh",
     "domains/event-knowledge/extract_events.ts",
-    "domains/datafinder-interface/client.ts",
     "domains/datafinder-interface/cli.ts",
-    "domains/datafinder-interface/manifest.json",
     "domains/datafinder-interface/UPDATE.md",
     "domains/datafinder-interface/README.md",
     "domains/datafinder-interface/openapi-routing.md",
@@ -97,7 +95,8 @@ test("test_event_extractor_uses_new_store_paths", () => {
 });
 
 test("test_datafinder_manifest_is_verified_and_cli_lists_without_legacy_package", async (t) => {
-  const manifest = load_json("domains/datafinder-interface/manifest.json");
+  // manifest 已抽离到独立包 @workcortex/datafinder-sdk（单一真源）。
+  const manifest = load_json("../../packages/datafinder-sdk/manifest.json");
   assert.ok(manifest["last_verified_against_docs_at"]);
   const unverified = (manifest["endpoints"] as Record<string, any>[])
     .filter((ep) => !ep["path_verified"])
@@ -139,7 +138,7 @@ test("test_datafinder_manifest_is_verified_and_cli_lists_without_legacy_package"
 });
 
 test("test_datafinder_client_prepares_path_query_header_and_body_params", async () => {
-  const { DataFinderClient } = await import("../domains/datafinder-interface/client.js");
+  const { DataFinderClient } = await import("@workcortex/datafinder-sdk");
   const client = new DataFinderClient({
     base_url: "https://analytics.volcengineapi.com",
     access_key: "ak",

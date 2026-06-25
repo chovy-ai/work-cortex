@@ -1,9 +1,9 @@
 {
   "id": "datafinder-interface",
-  "description": "DataFinder OpenAPI 端点定义 + 文档链接",
+  "description": "DataFinder 接入适配层（注入本应用凭据）+ 端点定义与文档链接的真源已抽离到独立包 @workcortex/datafinder-sdk",
   "truth_source": "火山引擎官方文档 https://www.volcengine.com/docs/84129",
   "serves": [
-    "domains/datafinder-interface/manifest.json"
+    "../../packages/datafinder-sdk/manifest.json"
   ],
   "update": {
     "type": "agent",

@@ -4,7 +4,7 @@
       "id": "datafinder-interface",
       "path": "domains/datafinder-interface/module.json",
       "serves": [
-        "domains/datafinder-interface/manifest.json"
+        "../../packages/datafinder-sdk/manifest.json"
       ]
     },
     {
