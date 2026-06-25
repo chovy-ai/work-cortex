@@ -14,13 +14,28 @@ import addFormats from "ajv-formats";
 import { openBackendSession, type BackendDecl } from "./backend.js";
 import { AbilityOutputError, AbilityRuntimeError } from "./errors.js";
 
+// 运行位置 dist/core/ → 包根 packages/atomic-abilities/ → packages/ → 仓库根
 const HERE = dirname(fileURLToPath(import.meta.url));
 const PKG_ROOT = resolve(HERE, "..", "..");
-const REPO_ROOT = resolve(PKG_ROOT, "..");
+const REPO_ROOT = resolve(PKG_ROOT, "..", "..");
 const BACKENDS_DIR = join(PKG_ROOT, "backends");
 
 const ajv = new Ajv2020.default({ allErrors: true, strict: false });
 addFormats.default(ajv);
+
+/**
+ * 按 $id 缓存编译结果：runStructured 每次调用都会传同一份带固定 $id 的 schema，
+ * 而 ajv 对同一 $id 第二次 compile 会抛「already exists」。带 $id 的先查缓存复用，
+ * 无 $id 的（匿名 schema）才每次新编译。否则进程内第二条同类请求即崩。
+ */
+function compileCached(schema: object): ReturnType<typeof ajv.compile> {
+  const id = (schema as { $id?: unknown }).$id;
+  if (typeof id === "string") {
+    const existing = ajv.getSchema(id);
+    if (existing) return existing as ReturnType<typeof ajv.compile>;
+  }
+  return ajv.compile(schema);
+}
 
 export interface RunStructuredOpts {
   prompt: string; // 完整提示词（领域自己拼好的）
@@ -40,7 +55,7 @@ function loadBackend(id: string): BackendDecl {
 }
 
 export async function runStructured<Out = unknown>(opts: RunStructuredOpts): Promise<Out> {
-  const validate = ajv.compile(opts.outputSchema);
+  const validate = compileCached(opts.outputSchema);
   const schemaJson = JSON.stringify(opts.outputSchema, null, 2);
   const reviseMax = opts.reviseMax ?? 1;
   const backend = loadBackend(opts.agent ?? "claude");
