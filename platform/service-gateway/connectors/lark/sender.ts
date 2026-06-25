@@ -1,4 +1,5 @@
 import { execFile } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import type { ConnectorPort, Conversation } from "../../core/contracts.js";
 import type { Logger } from "../../core/log.js";
 
@@ -92,9 +93,12 @@ export class LarkSender implements ConnectorPort {
 
   private async send(conversation: Conversation, contentArgs: string[]): Promise<string> {
     // 显式钉死 bot 身份（设计语义），不依赖 lark-cli 的 auto-detect
+    // 幂等键：一次 send 算一次、重试复用 —— 防止「首发失败但服务端其实已发」时重试发出重复消息
+    // （实测进度气泡「正在分析…」因此重复了两条）。每次 send 唯一、重试间稳定。
+    const idem = ["--idempotency-key", randomUUID()];
     const args = conversation.source_message_id
-      ? ["im", "+messages-reply", "--as", "bot", "--message-id", conversation.source_message_id, "--reply-in-thread", ...contentArgs]
-      : ["im", "+messages-send", "--as", "bot", "--chat-id", conversation.id, ...contentArgs];
+      ? ["im", "+messages-reply", "--as", "bot", "--message-id", conversation.source_message_id, "--reply-in-thread", ...idem, ...contentArgs]
+      : ["im", "+messages-send", "--as", "bot", "--chat-id", conversation.id, ...idem, ...contentArgs];
     let lastErr: unknown;
     for (let i = 0; i <= RETRIES; i++) {
       try {
